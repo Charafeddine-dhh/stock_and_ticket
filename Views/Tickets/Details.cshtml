@@ -1,0 +1,305 @@
+@model StockPortal.ViewModels.TicketDetailsViewModel
+@{
+    ViewData["Title"] = $"Ticket #{Model.Ticket.Id}: {Model.Ticket.Type}";
+    var ticket = Model.Ticket;
+}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb mb-1">
+                <li class="breadcrumb-item"><a href="@Url.Action("Index")">Tickets</a></li>
+                <li class="breadcrumb-item active" aria-current="page">Ticket #@ticket.Id</li>
+            </ol>
+        </nav>
+        <div class="d-flex align-items-center gap-2">
+            <h3 class="fw-bold mb-0">Ticket #@ticket.Id &bull; @ticket.Type Issue</h3>
+            @switch (ticket.Priority)
+            {
+                case 4: <span class="badge bg-danger fs-6"><i class="fa-solid fa-fire me-1"></i> Urgent</span>; break;
+                case 3: <span class="badge bg-warning text-dark fs-6"><i class="fa-solid fa-triangle-exclamation me-1"></i> High</span>; break;
+                case 2: <span class="badge bg-info text-dark fs-6">Medium</span>; break;
+                default: <span class="badge bg-secondary fs-6">Low</span>; break;
+            }
+        </div>
+    </div>
+    <div class="d-flex gap-2">
+        <button type="button" class="btn btn-warning text-dark" data-bs-toggle="modal" data-bs-target="#maintenanceModal">
+            <i class="fa-solid fa-wrench me-1"></i> Log Maintenance Work
+        </button>
+        <a href="@Url.Action("Index")" class="btn btn-outline-secondary">
+            <i class="fa-solid fa-arrow-left me-1"></i> Back to Queue
+        </a>
+    </div>
+</div>
+
+<div class="row g-4 mb-4">
+    <!-- Left Column: Discussion & Messages Timeline -->
+    <div class="col-lg-8">
+        <!-- Messages Card -->
+        <div class="card shadow-sm border-0 mb-4">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <h6 class="mb-0 fw-bold"><i class="fa-solid fa-comments text-primary me-2"></i> Activity & Discussion Timeline (@ticket.Messages.Count)</h6>
+                <span class="small text-muted">Opened @ticket.OpenedDT?.ToString("MMM dd, yyyy HH:mm")</span>
+            </div>
+            <div class="card-body p-4">
+                @if (!ticket.Messages.Any())
+                {
+                    <div class="text-center text-muted py-4">No comments or activity messages logged yet.</div>
+                }
+                else
+                {
+                    <div class="timeline">
+                        @foreach (var msg in ticket.Messages.OrderBy(m => m.TimeStamp))
+                        {
+                            <div class="d-flex gap-3 mb-4">
+                                <div style="width: 40px; height: 40px; border-radius: 50%; background: #e2e8f0; display: flex; align-items: center; justify-content: center; font-weight: bold; color: #475569; flex-shrink: 0;">
+                                    @(msg.User?.FullName != null ? msg.User.FullName.Substring(0, 1) : "U")
+                                </div>
+                                <div class="flex-grow-1">
+                                    <div class="d-flex justify-content-between align-items-center mb-1">
+                                        <div class="fw-bold text-dark">
+                                            @(msg.User?.FullName ?? "Staff Member")
+                                            <span class="text-muted fw-normal small">(@(msg.User?.Role ?? "Staff"))</span>
+                                        </div>
+                                        <small class="text-muted">@msg.TimeStamp?.ToString("MMM dd, yyyy HH:mm")</small>
+                                    </div>
+                                    <div class="p-3 bg-light rounded text-dark shadow-xs" style="white-space: pre-wrap;">@msg.Msg</div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+
+                <!-- Post Message Form -->
+                <div class="border-top pt-3 mt-4">
+                    <form asp-action="AddMessage" method="post">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="ticketId" value="@ticket.Id" />
+                        <div class="row g-2 align-items-end">
+                            <div class="col-md-4">
+                                <label class="form-label small fw-semibold text-muted">Post as User / Technician</label>
+                                <select name="userId" class="form-select form-select-sm" required>
+                                    @foreach (var tech in Model.Technicians)
+                                    {
+                                        <option value="@tech.Id" selected="@(tech.Id == (ticket.Handler?.TechUserId ?? 1))">@tech.FullName (@tech.Role)</option>
+                                    }
+                                </select>
+                            </div>
+                            <div class="col-md-8">
+                                <label class="form-label small fw-semibold text-muted">Add Note / Progress Update</label>
+                                <div class="input-group">
+                                    <textarea name="msg" class="form-control" rows="2" placeholder="Write reply or technician progress note..." required></textarea>
+                                    <button type="submit" class="btn btn-primary px-3">
+                                        <i class="fa-solid fa-paper-plane me-1"></i> Send
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Maintenance Logs linked to this ticket -->
+        @if (ticket.MaintenanceLogs.Any())
+        {
+            <div class="card shadow-sm border-0">
+                <div class="card-header bg-white">
+                    <h6 class="mb-0 fw-bold"><i class="fa-solid fa-wrench text-warning me-2"></i> Logged Maintenance Work Orders (@ticket.MaintenanceLogs.Count)</h6>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Type</th>
+                                    <th>Work Description</th>
+                                    <th>Parts Replaced</th>
+                                    <th>Technician</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var m in ticket.MaintenanceLogs)
+                                {
+                                    <tr>
+                                        <td>@m.TimStamp?.ToString("MMM dd, yyyy")</td>
+                                        <td><span class="badge @(m.MaintenanceType == 2 ? "bg-info text-dark" : "bg-danger")">@m.TypeName</span></td>
+                                        <td>@m.Description</td>
+                                        <td><code class="text-dark bg-light px-2 py-1 rounded small">@(m.PartsReplaced ?? "None")</code></td>
+                                        <td>@(m.Technician?.FullName ?? "Contractor")</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+
+    <!-- Right Column: Status & Assignment Controls + Asset Info -->
+    <div class="col-lg-4">
+        <!-- Ticket Controls -->
+        <div class="card shadow-sm border-0 mb-4">
+            <div class="card-header bg-white">
+                <h6 class="mb-0 fw-bold"><i class="fa-solid fa-sliders text-primary me-2"></i> Ticket Management</h6>
+            </div>
+            <div class="card-body">
+                <!-- Status Updater Form -->
+                <form asp-action="UpdateStatus" method="post" class="mb-3">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="ticketId" value="@ticket.Id" />
+                    <label class="form-label small fw-semibold text-muted">Ticket Status</label>
+                    <div class="input-group">
+                        <select name="statusId" class="form-select">
+                            @foreach (var st in Model.Statuses)
+                            {
+                                <option value="@st.Id" selected="@(st.Id == ticket.StatusId)">@st.Status</option>
+                            }
+                        </select>
+                        <button type="submit" class="btn btn-outline-primary">Update</button>
+                    </div>
+                </form>
+
+                <!-- Technician Assignment Form -->
+                <form asp-action="AssignTechnician" method="post" class="mb-3">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="ticketId" value="@ticket.Id" />
+                    <label class="form-label small fw-semibold text-muted">Assigned Technician</label>
+                    <div class="input-group">
+                        <select name="techUserId" class="form-select">
+                            <option value="">-- Unassigned --</option>
+                            @foreach (var tech in Model.Technicians)
+                            {
+                                <option value="@tech.Id" selected="@(tech.Id == ticket.Handler?.TechUserId)">@tech.FullName</option>
+                            }
+                        </select>
+                        <button type="submit" class="btn btn-outline-primary">Assign</button>
+                    </div>
+                </form>
+
+                <div class="pt-2 border-top small">
+                    <div class="d-flex justify-content-between text-muted mb-1">
+                        <span>Opened Date:</span>
+                        <span class="fw-semibold text-dark">@ticket.OpenedDT?.ToString("MMM dd, yyyy HH:mm")</span>
+                    </div>
+                    <div class="d-flex justify-content-between text-muted">
+                        <span>Closed Date:</span>
+                        <span class="fw-semibold text-dark">@(ticket.ClosedDT?.ToString("MMM dd, yyyy HH:mm") ?? "Pending Resolution")</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Linked Asset Card -->
+        @if (ticket.Asset != null)
+        {
+            <div class="card shadow-sm border-0 mb-4">
+                <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0 fw-bold"><i class="fa-solid fa-box text-success me-2"></i> Linked Hardware Asset</h6>
+                    <a href="@Url.Action("Details", "Assets", new { id = ticket.Asset.Id })" class="btn btn-sm btn-outline-primary py-0">View Asset</a>
+                </div>
+                <div class="card-body">
+                    <div class="fw-bold text-dark fs-5">@ticket.Asset.HospitalNo</div>
+                    <div class="text-muted small mb-2">@ticket.Asset.Brand &bull; @ticket.Asset.Type</div>
+
+                    <div class="small mb-1">
+                        <span class="text-muted">Serial No:</span> <code class="text-dark">@(ticket.Asset.SerialNo ?? "N/A")</code>
+                    </div>
+                    <div class="small mb-1">
+                        <span class="text-muted">Location:</span> <strong>@(ticket.Asset.Room?.DisplayName ?? "Unassigned")</strong>
+                    </div>
+                    <div class="small mb-1">
+                        <span class="text-muted">Custodian:</span> <strong>@(ticket.Asset.User?.FullName ?? "Central Stock")</strong>
+                    </div>
+                    <div class="small">
+                        <span class="text-muted">Asset Status:</span> <span class="badge bg-light text-dark border">@ticket.Asset.Status</span>
+                    </div>
+                </div>
+            </div>
+        }
+
+        <!-- Requester Info Card -->
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-white">
+                <h6 class="mb-0 fw-bold"><i class="fa-solid fa-user text-secondary me-2"></i> Requester Information</h6>
+            </div>
+            <div class="card-body">
+                <div class="fw-bold text-dark fs-6">@(ticket.OpenedByUser?.FullName ?? "Unknown User")</div>
+                <div class="small text-muted mb-2">@(ticket.OpenedByUser?.Role ?? "Staff") &bull; @(ticket.OpenedByUser?.Department?.Name ?? "General")</div>
+
+                @if (ticket.OnBehalfOfUser != null && ticket.OnBehalfOf != ticket.OpenedBy)
+                {
+                    <div class="p-2 bg-light rounded small mt-2">
+                        <span class="text-muted">Submitted on behalf of:</span>
+                        <div class="fw-semibold text-dark">@ticket.OnBehalfOfUser.FullName</div>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Log Maintenance from Ticket -->
+<div class="modal fade" id="maintenanceModal" tabindex="-1" aria-labelledby="maintenanceModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form asp-action="LogMaintenance" method="post">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="ticketId" value="@ticket.Id" />
+                <input type="hidden" name="assetId" value="@(ticket.AssetId ?? 1)" />
+
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold" id="maintenanceModalLabel">Log Maintenance Work Order</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Maintenance Type</label>
+                        <select name="maintenanceType" class="form-select">
+                            <option value="1">Breakdown / Corrective Repair</option>
+                            <option value="2">Preventive / Periodic Inspection</option>
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Technician in Charge</label>
+                        <select name="technicianId" class="form-select" required>
+                            @foreach (var tech in Model.Technicians)
+                            {
+                                <option value="@tech.Id" selected="@(tech.Id == (ticket.Handler?.TechUserId ?? 1))">@tech.FullName (@tech.Role)</option>
+                            }
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Contractor / Supplier (Optional)</label>
+                        <select name="supplierId" class="form-select">
+                            <option value="">-- In-House IT Staff --</option>
+                            @foreach (var sup in Model.Suppliers)
+                            {
+                                <option value="@sup.Id">@sup.Name</option>
+                            }
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Work Performed & Diagnostic Description</label>
+                        <textarea name="description" class="form-control" rows="3" placeholder="Describe diagnosis, repairs, calibration, or actions taken..." required></textarea>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Parts Replaced / Materials (JSON or text)</label>
+                        <input type="text" name="partsReplaced" class="form-control font-monospace" placeholder='e.g. {"Part": "1TB SSD", "Cost": 75}' />
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-warning text-dark fw-semibold">Save Maintenance Record</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

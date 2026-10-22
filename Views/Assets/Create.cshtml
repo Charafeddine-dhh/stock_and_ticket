@@ -1,0 +1,126 @@
+@model StockPortal.Models.Asset
+@{
+    ViewData["Title"] = "Register New Asset";
+}
+
+<div class="row justify-content-center">
+    <div class="col-lg-10">
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-white py-3">
+                <h5 class="mb-0 fw-bold"><i class="fa-solid fa-box-open text-primary me-2"></i> Register New Stock / Hardware Asset</h5>
+            </div>
+            <div class="card-body p-4">
+                <form asp-action="Create" method="post">
+                    @Html.AntiForgeryToken()
+                    <div asp-validation-summary="ModelOnly" class="text-danger mb-3"></div>
+
+                    <h6 class="fw-bold text-muted text-uppercase mb-3 pb-2 border-bottom">1. Identification & Classification</h6>
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-4">
+                            <label asp-for="HospitalNo" class="form-label fw-semibold">Hospital Asset Tag / ID</label>
+                            <input asp-for="HospitalNo" class="form-control" placeholder="e.g. HOSP-LAP-025" required />
+                            <span asp-validation-for="HospitalNo" class="text-danger small"></span>
+                        </div>
+                        <div class="col-md-4">
+                            <label asp-for="SerialNo" class="form-label fw-semibold">Serial Number</label>
+                            <input asp-for="SerialNo" class="form-control font-monospace" placeholder="e.g. SN-882910-HP" required />
+                            <span asp-validation-for="SerialNo" class="text-danger small"></span>
+                        </div>
+                        <div class="col-md-4">
+                            <label asp-for="Type" class="form-label fw-semibold">Equipment Type</label>
+                            <input asp-for="Type" class="form-control" placeholder="e.g. Laptop, Ultrasound, Switch, Monitor" required />
+                            <span asp-validation-for="Type" class="text-danger small"></span>
+                        </div>
+
+                        <div class="col-md-4">
+                            <label asp-for="Brand" class="form-label fw-semibold">Brand / Manufacturer</label>
+                            <input asp-for="Brand" class="form-control" placeholder="e.g. Dell, HP, Philips, Cisco" required />
+                        </div>
+                        <div class="col-md-4">
+                            <label asp-for="ModelNo" class="form-label fw-semibold">Model Number / Code</label>
+                            <input asp-for="ModelNo" class="form-control" placeholder="e.g. 850 or 750" />
+                        </div>
+                        <div class="col-md-4">
+                            <label asp-for="SupplierId" class="form-label fw-semibold">Supplier / Vendor</label>
+                            <select asp-for="SupplierId" class="form-select" asp-items="ViewBag.Suppliers">
+                                <option value="">-- Select Supplier --</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <h6 class="fw-bold text-muted text-uppercase mb-3 pb-2 border-bottom">2. Initial Location & Custody</h6>
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-4">
+                            <label asp-for="UserId" class="form-label fw-semibold">Assigned User / Custodian</label>
+                            <select asp-for="UserId" class="form-select" asp-items="ViewBag.Users">
+                                <option value="">-- Central IT Stock (Unassigned) --</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label asp-for="RoomId" class="form-label fw-semibold">Location / Room</label>
+                            <select asp-for="RoomId" class="form-select" asp-items="ViewBag.Rooms">
+                                <option value="">-- Select Room / Floor --</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label asp-for="CustodyTypeId" class="form-label fw-semibold">Custody Type</label>
+                            <select asp-for="CustodyTypeId" class="form-select" asp-items="ViewBag.CustodyTypes"></select>
+                        </div>
+                        <div class="col-md-4">
+                            <label asp-for="Status" class="form-label fw-semibold">Operational Status</label>
+                            <select asp-for="Status" class="form-select">
+                                <option value="In Service">In Service</option>
+                                <option value="In Stock">In Stock (Spare)</option>
+                                <option value="Under Maintenance">Under Maintenance</option>
+                                <option value="Retired">Retired / Scrapped</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <h6 class="fw-bold text-muted text-uppercase mb-3 pb-2 border-bottom">3. Financial & Technical Details</h6>
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-4">
+                            <label asp-for="Price" class="form-label fw-semibold">Purchase Price ($)</label>
+                            <input asp-for="Price" class="form-control" type="number" step="0.01" placeholder="0.00" />
+                        </div>
+                        <div class="col-md-4">
+                            <label asp-for="BuyingDate" class="form-label fw-semibold">Purchase Date</label>
+                            <input asp-for="BuyingDate" class="form-control" type="date" />
+                        </div>
+                        <div class="col-md-4">
+                            <label asp-for="WarrantyTill" class="form-label fw-semibold">Warranty Expiration Date</label>
+                            <input asp-for="WarrantyTill" class="form-control" type="date" />
+                        </div>
+                        <div class="col-12">
+                            <label asp-for="Specs" class="form-label fw-semibold">Hardware Specifications / Configuration Details</label>
+                            <textarea asp-for="Specs" class="form-control font-monospace" rows="3" placeholder="e.g. CPU, RAM, Disk, Port count, IP address or configuration details"></textarea>
+                        </div>
+                    </div>
+
+                    <h6 class="fw-bold text-muted text-uppercase mb-3 pb-2 border-bottom">4. Preventive Maintenance Schedule</h6>
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-4">
+                            <div class="form-check form-switch mt-4">
+                                <input asp-for="NeedsPeriodic" class="form-check-input" type="checkbox" id="needsPeriodicCheck" />
+                                <label class="form-check-label fw-semibold" for="needsPeriodicCheck">Requires Recurring Maintenance</label>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <label asp-for="PeriodicInterval" class="form-label fw-semibold">Interval (in Days)</label>
+                            <input asp-for="PeriodicInterval" class="form-control" type="number" placeholder="e.g. 90, 180, 365" />
+                        </div>
+                        <div class="col-md-4">
+                            <label asp-for="LastPeriodic" class="form-label fw-semibold">Last Checked Date</label>
+                            <input asp-for="LastPeriodic" class="form-control" type="date" />
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-end gap-2 border-top pt-3">
+                        <a href="@Url.Action("Index")" class="btn btn-outline-secondary">Cancel</a>
+                        <button type="submit" class="btn btn-primary px-4">Save Asset</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>

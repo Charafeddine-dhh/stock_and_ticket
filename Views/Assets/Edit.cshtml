@@ -1,0 +1,120 @@
+@model StockPortal.Models.Asset
+@{
+    ViewData["Title"] = $"Edit Asset: {Model.HospitalNo ?? ("#" + Model.Id)}";
+}
+
+<div class="row justify-content-center">
+    <div class="col-lg-10">
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-white py-3">
+                <h5 class="mb-0 fw-bold"><i class="fa-solid fa-pen-to-square text-primary me-2"></i> Edit Asset: @(Model.HospitalNo ?? $"Asset #{Model.Id}")</h5>
+            </div>
+            <div class="card-body p-4">
+                <form asp-action="Edit" method="post">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" asp-for="Id" />
+                    <div asp-validation-summary="ModelOnly" class="text-danger mb-3"></div>
+
+                    <h6 class="fw-bold text-muted text-uppercase mb-3 pb-2 border-bottom">1. Identification & Classification</h6>
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-4">
+                            <label asp-for="HospitalNo" class="form-label fw-semibold">Asset Tag / Hospital No</label>
+                            <input asp-for="HospitalNo" class="form-control" required />
+                        </div>
+                        <div class="col-md-4">
+                            <label asp-for="SerialNo" class="form-label fw-semibold">Serial Number</label>
+                            <input asp-for="SerialNo" class="form-control font-monospace" required />
+                        </div>
+                        <div class="col-md-4">
+                            <label asp-for="Type" class="form-label fw-semibold">Equipment Type</label>
+                            <input asp-for="Type" class="form-control" required />
+                        </div>
+
+                        <div class="col-md-4">
+                            <label asp-for="Brand" class="form-label fw-semibold">Brand / Manufacturer</label>
+                            <input asp-for="Brand" class="form-control" required />
+                        </div>
+                        <div class="col-md-4">
+                            <label asp-for="ModelNo" class="form-label fw-semibold">Model No</label>
+                            <input asp-for="ModelNo" class="form-control" />
+                        </div>
+                        <div class="col-md-4">
+                            <label asp-for="SupplierId" class="form-label fw-semibold">Supplier / Vendor</label>
+                            <select asp-for="SupplierId" class="form-select" asp-items="ViewBag.Suppliers">
+                                <option value="">-- None --</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <h6 class="fw-bold text-muted text-uppercase mb-3 pb-2 border-bottom">2. Status & Location</h6>
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-4">
+                            <label asp-for="Status" class="form-label fw-semibold">Operational Status</label>
+                            <select asp-for="Status" class="form-select">
+                                <option value="In Service">In Service</option>
+                                <option value="In Stock">In Stock (Spare)</option>
+                                <option value="Under Maintenance">Under Maintenance</option>
+                                <option value="Retired">Retired / Scrapped</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label asp-for="UserId" class="form-label fw-semibold">Assigned Custodian</label>
+                            <select asp-for="UserId" class="form-select" asp-items="ViewBag.Users">
+                                <option value="">-- Central IT Stock --</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label asp-for="RoomId" class="form-label fw-semibold">Location / Room</label>
+                            <select asp-for="RoomId" class="form-select" asp-items="ViewBag.Rooms">
+                                <option value="">-- Select Room --</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <h6 class="fw-bold text-muted text-uppercase mb-3 pb-2 border-bottom">3. Financial & Technical Details</h6>
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-4">
+                            <label asp-for="Price" class="form-label fw-semibold">Purchase Price ($)</label>
+                            <input asp-for="Price" class="form-control" type="number" step="0.01" />
+                        </div>
+                        <div class="col-md-4">
+                            <label asp-for="BuyingDate" class="form-label fw-semibold">Purchase Date</label>
+                            <input asp-for="BuyingDate" class="form-control" type="date" />
+                        </div>
+                        <div class="col-md-4">
+                            <label asp-for="WarrantyTill" class="form-label fw-semibold">Warranty Expiration Date</label>
+                            <input asp-for="WarrantyTill" class="form-control" type="date" />
+                        </div>
+                        <div class="col-12">
+                            <label asp-for="Specs" class="form-label fw-semibold">Technical Specifications</label>
+                            <textarea asp-for="Specs" class="form-control font-monospace" rows="3"></textarea>
+                        </div>
+                    </div>
+
+                    <h6 class="fw-bold text-muted text-uppercase mb-3 pb-2 border-bottom">4. Preventive Maintenance</h6>
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-4">
+                            <div class="form-check form-switch mt-4">
+                                <input asp-for="NeedsPeriodic" class="form-check-input" type="checkbox" id="needsPeriodicCheck" />
+                                <label class="form-check-label fw-semibold" for="needsPeriodicCheck">Requires Recurring Maintenance</label>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <label asp-for="PeriodicInterval" class="form-label fw-semibold">Interval (in Days)</label>
+                            <input asp-for="PeriodicInterval" class="form-control" type="number" />
+                        </div>
+                        <div class="col-md-4">
+                            <label asp-for="LastPeriodic" class="form-label fw-semibold">Last Checked Date</label>
+                            <input asp-for="LastPeriodic" class="form-control" type="date" />
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-end gap-2 border-top pt-3">
+                        <a href="@Url.Action("Details", new { id = Model.Id })" class="btn btn-outline-secondary">Cancel</a>
+                        <button type="submit" class="btn btn-primary px-4">Save Changes</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>

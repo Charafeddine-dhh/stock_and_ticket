@@ -1,0 +1,191 @@
+@model IEnumerable<StockPortal.Models.Ticket>
+@{
+    ViewData["Title"] = "Service & Support Tickets";
+    var statuses = ViewBag.Statuses as List<StockPortal.Models.TicketStatus> ?? new();
+}
+
+<!-- Header & Quick Stats Navigation -->
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h4 class="fw-bold mb-0">Helpdesk & Support Tickets</h4>
+        <small class="text-muted">Manage technical service tickets, technician dispatches, and issue resolutions</small>
+    </div>
+    <a href="@Url.Action("Create")" class="btn btn-primary">
+        <i class="fa-solid fa-plus me-1"></i> Open New Ticket
+    </a>
+</div>
+
+<!-- Filter Tabs Toolbar -->
+<div class="card shadow-sm border-0 mb-4">
+    <div class="card-body p-3">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
+            <!-- Status Tabs -->
+            <div class="btn-group" role="group">
+                <a href="@Url.Action("Index", new { priority = ViewBag.SelectedPriority, type = ViewBag.SelectedType })" 
+                   class="btn btn-sm @(ViewBag.SelectedStatusId == null ? "btn-primary" : "btn-outline-secondary")">
+                    All Tickets
+                </a>
+                @foreach (var st in statuses)
+                {
+                    <a href="@Url.Action("Index", new { statusId = st.Id, priority = ViewBag.SelectedPriority, type = ViewBag.SelectedType })" 
+                       class="btn btn-sm @(ViewBag.SelectedStatusId == st.Id ? "btn-primary" : "btn-outline-secondary")">
+                        @st.Status
+                    </a>
+                }
+            </div>
+
+            <!-- Priority & Search filters -->
+            <form method="get" class="d-flex gap-2 align-items-center">
+                <input type="hidden" name="statusId" value="@ViewBag.SelectedStatusId" />
+                <select name="priority" class="form-select form-select-sm" onchange="this.form.submit()">
+                    <option value="">All Priorities</option>
+                    <option value="4" selected="@(ViewBag.SelectedPriority == 4)">Urgent</option>
+                    <option value="3" selected="@(ViewBag.SelectedPriority == 3)">High</option>
+                    <option value="2" selected="@(ViewBag.SelectedPriority == 2)">Medium</option>
+                    <option value="1" selected="@(ViewBag.SelectedPriority == 1)">Low</option>
+                </select>
+
+                <select name="type" class="form-select form-select-sm" onchange="this.form.submit()">
+                    <option value="">All Categories</option>
+                    <option value="Hardware" selected="@(ViewBag.SelectedType == "Hardware")">Hardware</option>
+                    <option value="Software" selected="@(ViewBag.SelectedType == "Software")">Software</option>
+                    <option value="Maintenance" selected="@(ViewBag.SelectedType == "Maintenance")">Maintenance</option>
+                    <option value="Network" selected="@(ViewBag.SelectedType == "Network")">Network</option>
+                </select>
+
+                <input type="text" name="search" value="@ViewBag.Search" class="form-control form-control-sm" placeholder="Search ticket #, asset, user..." style="width: 220px;" />
+                <button type="submit" class="btn btn-sm btn-outline-primary"><i class="fa-solid fa-magnifying-glass"></i></button>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Tickets Queue Table -->
+<div class="card shadow-sm border-0">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th style="width: 80px;">Ticket #</th>
+                        <th>Category & Asset</th>
+                        <th>Priority</th>
+                        <th>Status</th>
+                        <th>Requester</th>
+                        <th>Assigned Technician</th>
+                        <th>Opened Time</th>
+                        <th>Messages</th>
+                        <th class="text-end">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (!Model.Any())
+                    {
+                        <tr>
+                            <td colspan="9" class="text-center text-muted py-5">
+                                <i class="fa-solid fa-ticket fa-2x mb-2 text-secondary"></i>
+                                <div>No tickets found in this view.</div>
+                            </td>
+                        </tr>
+                    }
+                    @foreach (var ticket in Model)
+                    {
+                        <tr>
+                            <td class="fw-bold">
+                                <a href="@Url.Action("Details", new { id = ticket.Id })" class="text-decoration-none">
+                                    #@ticket.Id
+                                </a>
+                            </td>
+                            <td>
+                                <div class="fw-semibold">
+                                    <span class="badge bg-light text-dark border me-1">@ticket.Type</span>
+                                    @if (ticket.Asset != null)
+                                    {
+                                        <a href="@Url.Action("Details", "Assets", new { id = ticket.Asset.Id })" class="text-decoration-none">
+                                            @ticket.Asset.HospitalNo &bull; @ticket.Asset.Brand (@ticket.Asset.Type)
+                                        </a>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted">General Service</span>
+                                    }
+                                </div>
+                            </td>
+                            <td>
+                                @switch (ticket.Priority)
+                                {
+                                    case 4: <span class="badge bg-danger"><i class="fa-solid fa-fire me-1"></i> Urgent</span>; break;
+                                    case 3: <span class="badge bg-warning text-dark"><i class="fa-solid fa-triangle-exclamation me-1"></i> High</span>; break;
+                                    case 2: <span class="badge bg-info text-dark">Medium</span>; break;
+                                    default: <span class="badge bg-secondary">Low</span>; break;
+                                }
+                            </td>
+                            <td>
+                                @switch (ticket.StatusId)
+                                {
+                                    case 1:
+                                        <span class="badge bg-danger bg-opacity-10 text-danger border border-danger">
+                                            <i class="fa-solid fa-circle-dot me-1"></i> Opened
+                                        </span>
+                                        break;
+                                    case 2:
+                                        <span class="badge bg-warning bg-opacity-10 text-warning border border-warning">
+                                            <i class="fa-solid fa-spinner me-1"></i> Pending
+                                        </span>
+                                        break;
+                                    case 3:
+                                        <span class="badge bg-secondary">Delayed</span>
+                                        break;
+                                    case 4:
+                                        <span class="badge bg-dark">Canceled</span>
+                                        break;
+                                    case 5:
+                                        <span class="badge bg-success bg-opacity-10 text-success border border-success">
+                                            <i class="fa-solid fa-check me-1"></i> Closed
+                                        </span>
+                                        break;
+                                    default:
+                                        <span class="badge bg-light text-dark">@(ticket.Status?.Status ?? "Status")</span>
+                                        break;
+                                }
+                            </td>
+                            <td>
+                                <div class="fw-semibold small">@(ticket.OpenedByUser?.FullName ?? "Unknown")</div>
+                                @if (ticket.OnBehalfOfUser != null && ticket.OnBehalfOf != ticket.OpenedBy)
+                                {
+                                    <div class="text-muted" style="font-size: 0.72rem;">for @ticket.OnBehalfOfUser.FullName</div>
+                                }
+                            </td>
+                            <td>
+                                @if (ticket.Handler?.TechUser != null)
+                                {
+                                    <span class="badge bg-light text-dark border">
+                                        <i class="fa-solid fa-user-gear text-primary me-1"></i> @ticket.Handler.TechUser.FullName
+                                    </span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-danger bg-opacity-10 text-danger">Unassigned</span>
+                                }
+                            </td>
+                            <td>
+                                <div class="small text-muted">@ticket.OpenedDT?.ToString("MMM dd, yyyy")</div>
+                                <div class="small text-secondary" style="font-size: 0.75rem;">@ticket.OpenedDT?.ToString("HH:mm")</div>
+                            </td>
+                            <td>
+                                <span class="badge bg-light text-muted border">
+                                    <i class="fa-solid fa-comments me-1"></i> @ticket.Messages.Count
+                                </span>
+                            </td>
+                            <td class="text-end">
+                                <a href="@Url.Action("Details", new { id = ticket.Id })" class="btn btn-sm btn-outline-primary">
+                                    View
+                                </a>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

@@ -1,0 +1,82 @@
+@model StockPortal.Models.Ticket
+@{
+    ViewData["Title"] = "Open New Service Ticket";
+}
+
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-white py-3">
+                <h5 class="mb-0 fw-bold"><i class="fa-solid fa-ticket text-primary me-2"></i> Open New Technical Support Ticket</h5>
+            </div>
+            <div class="card-body p-4">
+                <form asp-action="Create" method="post">
+                    @Html.AntiForgeryToken()
+                    <div asp-validation-summary="ModelOnly" class="text-danger mb-3"></div>
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-12">
+                            <label asp-for="AssetId" class="form-label fw-semibold">Target Hardware Asset (Optional)</label>
+                            <select asp-for="AssetId" class="form-select" asp-items="ViewBag.Assets">
+                                <option value="">-- General Service Request (No specific hardware) --</option>
+                            </select>
+                            <div class="form-text small">Select the equipment experiencing issues to link service logs and history.</div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label asp-for="Type" class="form-label fw-semibold">Issue Category</label>
+                            <select asp-for="Type" class="form-select">
+                                <option value="Hardware">Hardware Fault / Breakdown</option>
+                                <option value="Software">Software & OS Issue</option>
+                                <option value="Network">Network & Connectivity</option>
+                                <option value="Maintenance">Preventive Maintenance Request</option>
+                                <option value="Access">User Account & Permissions</option>
+                            </select>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label asp-for="Priority" class="form-label fw-semibold">Priority Level</label>
+                            <select asp-for="Priority" class="form-select">
+                                <option value="1">Low - General Inquiry</option>
+                                <option value="2" selected>Medium - Normal Work Impact</option>
+                                <option value="3">High - Department Bottleneck</option>
+                                <option value="4">Urgent - Clinical / Critical Service Down</option>
+                            </select>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label asp-for="OpenedBy" class="form-label fw-semibold">Reported By</label>
+                            <select asp-for="OpenedBy" class="form-select" asp-items="ViewBag.Users" required>
+                                <option value="">-- Select Reporting User --</option>
+                            </select>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label asp-for="OnBehalfOf" class="form-label fw-semibold">On Behalf Of (Optional)</label>
+                            <select asp-for="OnBehalfOf" class="form-select" asp-items="ViewBag.Users">
+                                <option value="">-- Same as Reporting User --</option>
+                            </select>
+                        </div>
+
+                        <div class="col-md-12">
+                            <label name="assignedTechId" class="form-label fw-semibold">Assign Technician Immediately (Optional)</label>
+                            <select name="assignedTechId" class="form-select" asp-items="ViewBag.Technicians">
+                                <option value="">-- Leave in Unassigned Queue --</option>
+                            </select>
+                        </div>
+
+                        <div class="col-12">
+                            <label class="form-label fw-semibold">Issue Description & Symptoms</label>
+                            <textarea name="initialMessage" class="form-control" rows="4" placeholder="Detail error messages, physical damage, symptoms, or steps to reproduce..." required></textarea>
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-end gap-2 border-top pt-3">
+                        <a href="@Url.Action("Index")" class="btn btn-outline-secondary">Cancel</a>
+                        <button type="submit" class="btn btn-primary px-4">Submit Ticket</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>

@@ -1,0 +1,283 @@
+@model StockPortal.ViewModels.MaintenanceScheduleViewModel
+@{
+    ViewData["Title"] = "Preventive Maintenance & Inspection Schedule";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h4 class="fw-bold mb-0">Preventive Maintenance & Inspection Schedule</h4>
+        <small class="text-muted">Track recurring hardware servicing, calibration cycles, and maintenance work logs</small>
+    </div>
+    <a href="@Url.Action("Log")" class="btn btn-warning text-dark fw-semibold">
+        <i class="fa-solid fa-wrench me-1"></i> Log Maintenance Work
+    </a>
+</div>
+
+<!-- Maintenance Overview Cards -->
+<div class="row g-3 mb-4">
+    <div class="col-md-4">
+        <div class="card border-0 shadow-sm p-3" style="background: linear-gradient(135deg, #fef2f2 0%, #ffffff 100%);">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <div class="text-muted small text-uppercase fw-bold">Overdue Checkups</div>
+                    <div class="h3 fw-bold text-danger mb-0">@Model.OverdueAssets.Count</div>
+                </div>
+                <div class="stat-icon bg-danger bg-opacity-10 text-danger"><i class="fa-solid fa-triangle-exclamation"></i></div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card border-0 shadow-sm p-3" style="background: linear-gradient(135deg, #fff7ed 0%, #ffffff 100%);">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <div class="text-muted small text-uppercase fw-bold">Due within 30 Days</div>
+                    <div class="h3 fw-bold text-warning mb-0">@Model.DueWithin30DaysAssets.Count</div>
+                </div>
+                <div class="stat-icon bg-warning bg-opacity-10 text-warning"><i class="fa-solid fa-clock"></i></div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card border-0 shadow-sm p-3" style="background: linear-gradient(135deg, #f0fdf4 0%, #ffffff 100%);">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <div class="text-muted small text-uppercase fw-bold">Up to Date Assets</div>
+                    <div class="h3 fw-bold text-success mb-0">@Model.UpToDateAssets.Count</div>
+                </div>
+                <div class="stat-icon bg-success bg-opacity-10 text-success"><i class="fa-solid fa-check-circle"></i></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Tabs for Schedules & Historical Work Orders -->
+<div class="card shadow-sm border-0">
+    <div class="card-header bg-white p-0">
+        <ul class="nav nav-tabs card-header-tabs m-0 px-3 pt-2" id="maintTabs" role="tablist">
+            <li class="nav-item">
+                <button class="nav-link active fw-semibold text-danger" id="overdue-tab" data-bs-toggle="tab" data-bs-target="#overdue" type="button" role="tab">
+                    <i class="fa-solid fa-triangle-exclamation me-1"></i> Overdue Inspections (@Model.OverdueAssets.Count)
+                </button>
+            </li>
+            <li class="nav-item">
+                <button class="nav-link fw-semibold text-warning" id="upcoming-tab" data-bs-toggle="tab" data-bs-target="#upcoming" type="button" role="tab">
+                    <i class="fa-solid fa-clock me-1"></i> Due Within 30 Days (@Model.DueWithin30DaysAssets.Count)
+                </button>
+            </li>
+            <li class="nav-item">
+                <button class="nav-link fw-semibold text-success" id="uptodate-tab" data-bs-toggle="tab" data-bs-target="#uptodate" type="button" role="tab">
+                    <i class="fa-solid fa-circle-check me-1"></i> Up to Date (@Model.UpToDateAssets.Count)
+                </button>
+            </li>
+            <li class="nav-item">
+                <button class="nav-link fw-semibold text-dark" id="logs-tab" data-bs-toggle="tab" data-bs-target="#logs" type="button" role="tab">
+                    <i class="fa-solid fa-file-lines me-1"></i> Completed Work Logs (@Model.RecentLogs.Count)
+                </button>
+            </li>
+        </ul>
+    </div>
+    <div class="card-body p-4">
+        <div class="tab-content" id="maintTabsContent">
+            <!-- 1. Overdue Tab -->
+            <div class="tab-pane fade show active" id="overdue" role="tabpanel">
+                @if (!Model.OverdueAssets.Any())
+                {
+                    <div class="text-center text-success py-4">
+                        <i class="fa-solid fa-circle-check fa-3x mb-2 text-success"></i>
+                        <h5>No Overdue Maintenance!</h5>
+                        <p class="text-muted">All periodic medical and IT equipment checkups are currently up to date.</p>
+                    </div>
+                }
+                else
+                {
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Asset Tag / Equipment</th>
+                                    <th>Location</th>
+                                    <th>Custodian</th>
+                                    <th>Interval</th>
+                                    <th>Last Inspected</th>
+                                    <th>Due Date</th>
+                                    <th class="text-end">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var a in Model.OverdueAssets)
+                                {
+                                    <tr>
+                                        <td>
+                                            <a href="@Url.Action("Details", "Assets", new { id = a.Id })" class="fw-bold text-decoration-none">
+                                                @a.HospitalNo &bull; @a.Brand (@a.Type)
+                                            </a>
+                                            <div class="small text-muted font-monospace">SN: @(a.SerialNo ?? "N/A")</div>
+                                        </td>
+                                        <td>@(a.Room?.DisplayName ?? "Unassigned")</td>
+                                        <td>@(a.User?.FullName ?? "Central Stock")</td>
+                                        <td>Every @a.PeriodicInterval days</td>
+                                        <td>@(a.LastPeriodic?.ToString("MMM dd, yyyy") ?? "Never")</td>
+                                        <td>
+                                            <span class="badge bg-danger">
+                                                Overdue (@a.NextPeriodic?.ToString("MMM dd, yyyy"))
+                                            </span>
+                                        </td>
+                                        <td class="text-end">
+                                            <a href="@Url.Action("Log", new { assetId = a.Id })" class="btn btn-sm btn-outline-danger">
+                                                Log Inspection
+                                            </a>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </div>
+
+            <!-- 2. Due Within 30 Days Tab -->
+            <div class="tab-pane fade" id="upcoming" role="tabpanel">
+                @if (!Model.DueWithin30DaysAssets.Any())
+                {
+                    <div class="text-center text-muted py-4">No assets due for inspection in the next 30 days.</div>
+                }
+                else
+                {
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Asset Tag / Equipment</th>
+                                    <th>Location</th>
+                                    <th>Custodian</th>
+                                    <th>Interval</th>
+                                    <th>Last Inspected</th>
+                                    <th>Due Date</th>
+                                    <th class="text-end">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var a in Model.DueWithin30DaysAssets)
+                                {
+                                    <tr>
+                                        <td>
+                                            <a href="@Url.Action("Details", "Assets", new { id = a.Id })" class="fw-bold text-decoration-none">
+                                                @a.HospitalNo &bull; @a.Brand (@a.Type)
+                                            </a>
+                                        </td>
+                                        <td>@(a.Room?.DisplayName ?? "Unassigned")</td>
+                                        <td>@(a.User?.FullName ?? "Central Stock")</td>
+                                        <td>Every @a.PeriodicInterval days</td>
+                                        <td>@(a.LastPeriodic?.ToString("MMM dd, yyyy") ?? "Never")</td>
+                                        <td>
+                                            <span class="badge bg-warning text-dark">
+                                                Due: @a.NextPeriodic?.ToString("MMM dd, yyyy")
+                                            </span>
+                                        </td>
+                                        <td class="text-end">
+                                            <a href="@Url.Action("Log", new { assetId = a.Id })" class="btn btn-sm btn-outline-warning text-dark">
+                                                Perform Checkup
+                                            </a>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </div>
+
+            <!-- 3. Up to Date Tab -->
+            <div class="tab-pane fade" id="uptodate" role="tabpanel">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Asset Tag / Equipment</th>
+                                <th>Location</th>
+                                <th>Custodian</th>
+                                <th>Interval</th>
+                                <th>Last Checkup</th>
+                                <th>Next Scheduled</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var a in Model.UpToDateAssets)
+                            {
+                                <tr>
+                                    <td>
+                                        <a href="@Url.Action("Details", "Assets", new { id = a.Id })" class="fw-bold text-decoration-none">
+                                            @a.HospitalNo &bull; @a.Brand (@a.Type)
+                                        </a>
+                                    </td>
+                                    <td>@(a.Room?.DisplayName ?? "Unassigned")</td>
+                                    <td>@(a.User?.FullName ?? "Central Stock")</td>
+                                    <td>Every @a.PeriodicInterval days</td>
+                                    <td>@(a.LastPeriodic?.ToString("MMM dd, yyyy") ?? "-")</td>
+                                    <td>
+                                        <span class="badge bg-success bg-opacity-10 text-success border border-success">
+                                            @(a.NextPeriodic?.ToString("MMM dd, yyyy") ?? "Planned")
+                                        </span>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- 4. Historical Work Orders Tab -->
+            <div class="tab-pane fade" id="logs" role="tabpanel">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Date</th>
+                                <th>Equipment</th>
+                                <th>Type</th>
+                                <th>Description</th>
+                                <th>Parts Replaced</th>
+                                <th>Technician / Contractor</th>
+                                <th>Ticket</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var m in Model.RecentLogs)
+                            {
+                                <tr>
+                                    <td>@m.TimStamp?.ToString("MMM dd, yyyy")</td>
+                                    <td>
+                                        <a href="@Url.Action("Details", "Assets", new { id = m.AssetId })" class="fw-semibold text-decoration-none">
+                                            @(m.Asset?.HospitalNo ?? "Asset #" + m.AssetId)
+                                        </a>
+                                        <div class="small text-muted">@m.Asset?.Brand</div>
+                                    </td>
+                                    <td>
+                                        <span class="badge @(m.MaintenanceType == 2 ? "bg-info text-dark" : "bg-danger")">
+                                            @m.TypeName
+                                        </span>
+                                    </td>
+                                    <td>@m.Description</td>
+                                    <td><code class="text-dark bg-light px-2 py-1 rounded small">@(m.PartsReplaced ?? "None")</code></td>
+                                    <td>@(m.Technician?.FullName ?? m.Supplier?.Name ?? "In-House")</td>
+                                    <td>
+                                        @if (m.TicketId.HasValue)
+                                        {
+                                            <a href="@Url.Action("Details", "Tickets", new { id = m.TicketId.Value })" class="btn btn-sm btn-light border py-0">
+                                                #@m.TicketId
+                                            </a>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-muted small">-</span>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

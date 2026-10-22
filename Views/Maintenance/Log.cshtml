@@ -1,0 +1,74 @@
+@model StockPortal.Models.AssetMaintenance
+@{
+    ViewData["Title"] = "Log Maintenance Work Order";
+}
+
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-white py-3">
+                <h5 class="mb-0 fw-bold"><i class="fa-solid fa-wrench text-warning me-2"></i> Record Maintenance Work Order</h5>
+            </div>
+            <div class="card-body p-4">
+                <form asp-action="Log" method="post">
+                    @Html.AntiForgeryToken()
+                    <div asp-validation-summary="ModelOnly" class="text-danger mb-3"></div>
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-12">
+                            <label asp-for="AssetId" class="form-label fw-semibold">Target Hardware Asset</label>
+                            <select asp-for="AssetId" class="form-select" asp-items="ViewBag.Assets" required>
+                                <option value="">-- Select Equipment --</option>
+                            </select>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label asp-for="MaintenanceType" class="form-label fw-semibold">Maintenance Type</label>
+                            <select asp-for="MaintenanceType" class="form-select">
+                                <option value="2">Preventive / Periodic Inspection</option>
+                                <option value="1">Breakdown / Corrective Repair</option>
+                            </select>
+                            <div class="form-text small">Logging a Preventive checkup automatically resets the asset's next periodic due date.</div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label asp-for="TicketId" class="form-label fw-semibold">Linked Helpdesk Ticket (Optional)</label>
+                            <select asp-for="TicketId" class="form-select" asp-items="ViewBag.Tickets">
+                                <option value="">-- Standalone Maintenance (No Ticket) --</option>
+                            </select>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label asp-for="UserId" class="form-label fw-semibold">Responsible Technician / Staff</label>
+                            <select asp-for="UserId" class="form-select" asp-items="ViewBag.Technicians" required>
+                                <option value="">-- Select Technician --</option>
+                            </select>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label asp-for="SupplierId" class="form-label fw-semibold">Third-Party Supplier / Vendor (Optional)</label>
+                            <select asp-for="SupplierId" class="form-select" asp-items="ViewBag.Suppliers">
+                                <option value="">-- Internal Staff Only --</option>
+                            </select>
+                        </div>
+
+                        <div class="col-12">
+                            <label asp-for="Description" class="form-label fw-semibold">Maintenance Action & Work Performed</label>
+                            <textarea asp-for="Description" class="form-control" rows="3" placeholder="Describe actions performed, diagnostic results, recalibrations, or testing..." required></textarea>
+                        </div>
+
+                        <div class="col-12">
+                            <label asp-for="PartsReplaced" class="form-label fw-semibold">Parts Replaced / Materials (JSON or Text)</label>
+                            <input asp-for="PartsReplaced" class="form-control font-monospace" placeholder='e.g. {"Part": "Battery Pack", "Cost": 120, "SN": "BT-9921"}' />
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-end gap-2 border-top pt-3">
+                        <a href="@Url.Action("Index")" class="btn btn-outline-secondary">Cancel</a>
+                        <button type="submit" class="btn btn-warning text-dark fw-semibold px-4">Record Work Order</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
