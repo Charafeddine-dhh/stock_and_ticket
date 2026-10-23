@@ -15,6 +15,9 @@
         <h3 class="fw-bold mb-0">@(asset.Brand) @(asset.Type) &bull; <span class="text-primary font-monospace">@(asset.HospitalNo)</span></h3>
     </div>
     <div class="d-flex gap-2">
+        <a href="@Url.Action("PrintTag", new { id = asset.Id })" class="btn btn-outline-dark" target="_blank">
+            <i class="fa-solid fa-print me-1"></i> Print Tag
+        </a>
         <button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#transferModal">
             <i class="fa-solid fa-arrows-split-up-and-left me-1"></i> Transfer Custody
         </button>
@@ -23,6 +26,12 @@
         </a>
         <a href="@Url.Action("Edit", new { id = asset.Id })" class="btn btn-secondary">
             <i class="fa-solid fa-pen me-1"></i> Edit
+        </a>
+        <button type="button" class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#retireModal">
+            <i class="fa-solid fa-ban me-1"></i> Retire
+        </button>
+        <a href="@Url.Action("Delete", new { id = asset.Id })" class="btn btn-outline-danger">
+            <i class="fa-solid fa-trash-can me-1"></i> Delete
         </a>
     </div>
 </div>
@@ -434,6 +443,35 @@
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
                     <button type="submit" class="btn btn-primary">Confirm Transfer</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Retire Asset Modal -->
+<div class="modal fade" id="retireModal" tabindex="-1" aria-labelledby="retireModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form asp-action="Retire" method="post">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="id" value="@asset.Id" />
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold" id="retireModalLabel">Decommission / Retire Asset</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted">
+                        Are you sure you want to mark asset <strong>@(asset.HospitalNo ?? ("#" + asset.Id))</strong> as <em>Retired / Scrapped</em>?
+                    </p>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Retirement Reason</label>
+                        <input type="text" name="reason" class="form-control" placeholder="e.g. Obsolete hardware, irreparable board failure..." required />
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-warning">Confirm Retirement</button>
                 </div>
             </form>
         </div>

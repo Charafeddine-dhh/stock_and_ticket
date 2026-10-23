@@ -28,11 +28,26 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
         options.ExpireTimeSpan = TimeSpan.FromDays(30);
     });
 
-// Database
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
-builder.Services.AddDbContext<StockDbContext>(options =>
-    options.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString))
-);
+// Multi-provider Database setup (SQLite by default for zero-config run, or MySQL/MariaDB)
+var dbProvider = builder.Configuration.GetValue<string>("DatabaseProvider") ?? "Sqlite";
+var mySqlConn = builder.Configuration.GetConnectionString("MySqlConnection") 
+                ?? "server=localhost;port=3306;database=stock;user=root;password=;CharSet=utf8mb4;";
+var sqliteConn = builder.Configuration.GetConnectionString("SqliteConnection") 
+                 ?? builder.Configuration.GetConnectionString("DefaultConnection") 
+                 ?? "Data Source=stockportal.db";
+
+if (dbProvider.Equals("MySql", StringComparison.OrdinalIgnoreCase))
+{
+    builder.Services.AddDbContext<StockDbContext>(options =>
+        options.UseMySql(mySqlConn, new MySqlServerVersion(new Version(8, 0, 36)))
+    );
+}
+else
+{
+    builder.Services.AddDbContext<StockDbContext>(options =>
+        options.UseSqlite(sqliteConn)
+    );
+}
 
 var app = builder.Build();
 

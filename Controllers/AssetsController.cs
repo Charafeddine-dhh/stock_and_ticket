@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using System.Text;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
@@ -20,7 +21,7 @@ namespace StockPortal.Controllers
         }
 
         // GET: Assets
-        public async Task<IActionResult> Index(string? search, string? status, string? type, int? roomId)
+        public async Task<IActionResult> Index(string? search, string? status, string? type, int? roomId, string? warranty)
         {
             var query = _context.Assets
                 .Include(a => a.User)
@@ -56,10 +57,29 @@ namespace StockPortal.Controllers
                 query = query.Where(a => a.RoomId == roomId.Value);
             }
 
+            if (!string.IsNullOrWhiteSpace(warranty))
+            {
+                var now = DateTime.Now.Date;
+                if (warranty == "expired")
+                {
+                    query = query.Where(a => a.WarrantyTill.HasValue && a.WarrantyTill.Value < now);
+                }
+                else if (warranty == "expiring30")
+                {
+                    var future30 = now.AddDays(30);
+                    query = query.Where(a => a.WarrantyTill.HasValue && a.WarrantyTill.Value >= now && a.WarrantyTill.Value <= future30);
+                }
+                else if (warranty == "active")
+                {
+                    query = query.Where(a => a.WarrantyTill.HasValue && a.WarrantyTill.Value >= now);
+                }
+            }
+
             ViewBag.Search = search;
             ViewBag.SelectedStatus = status;
             ViewBag.SelectedType = type;
             ViewBag.SelectedRoomId = roomId;
+            ViewBag.SelectedWarranty = warranty;
 
             ViewBag.Rooms = await _context.Rooms.OrderBy(r => r.Floor).ThenBy(r => r.RoomNo).ToListAsync();
             ViewBag.Types = await _context.Assets.Where(a => a.Type != null).Select(a => a.Type!).Distinct().ToListAsync();
@@ -120,6 +140,13 @@ namespace StockPortal.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Create(Asset asset)
         {
+            // Validate unique HospitalNo
+            if (!string.IsNullOrWhiteSpace(asset.HospitalNo) && 
+                await _context.Assets.AnyAsync(a => a.HospitalNo == asset.HospitalNo.Trim()))
+            {
+                ModelState.AddModelError("HospitalNo", "An asset with this Hospital Tag Number already exists.");
+            }
+
             if (ModelState.IsValid)
             {
                 // Calculate next periodic if needed
@@ -173,6 +200,13 @@ namespace StockPortal.Controllers
         public async Task<IActionResult> Edit(int id, Asset asset)
         {
             if (id != asset.Id) return NotFound();
+
+            // Validate unique HospitalNo if changed
+            if (!string.IsNullOrWhiteSpace(asset.HospitalNo) && 
+                await _context.Assets.AnyAsync(a => a.HospitalNo == asset.HospitalNo.Trim() && a.Id != id))
+            {
+                ModelState.AddModelError("HospitalNo", "An asset with this Hospital Tag Number already exists.");
+            }
 
             if (ModelState.IsValid)
             {
@@ -246,6 +280,143 @@ namespace StockPortal.Controllers
             await _context.SaveChangesAsync();
             TempData["SuccessMessage"] = "Asset custody and location updated successfully!";
             return RedirectToAction(nameof(Details), new { id = assetId });
+        }
+
+        // POST: Assets/Retire/5
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> Retire(int id, string? reason)
+        {
+            var asset = await _context.Assets.FindAsync(id);
+            if (asset == null) return NotFound();
+
+            asset.Status = "Retired";
+            _context.Update(asset);
+
+            // Record history notes
+            _context.AssetHistories.Add(new AssetHistory
+            {
+                AssetId = asset.Id,
+                UserId = asset.UserId ?? 1,
+                RoomId = asset.RoomId ?? 1,
+                CustodyTypeId = asset.CustodyTypeId ?? 1,
+                AssignedOn = DateTime.Now,
+                ReturnedOn = DateTime.Now,
+                Notes = $"Asset retired / decommissioned. Reason: {reason ?? "End of life cycle"}"
+            });
+
+            await _context.SaveChangesAsync();
+            TempData["SuccessMessage"] = $"Asset {asset.HospitalNo ?? ("#" + asset.Id)} was marked as Retired.";
+            return RedirectToAction(nameof(Details), new { id });
+        }
+
+        // GET: Assets/Delete/5
+        public async Task<IActionResult> Delete(int? id)
+        {
+            if (id == null) return NotFound();
+
+            var asset = await _context.Assets
+                .Include(a => a.User)
+                .Include(a => a.Room)
+                .Include(a => a.Tickets)
+                .Include(a => a.MaintenanceRecords)
+                .FirstOrDefaultAsync(m => m.Id == id);
+
+            if (asset == null) return NotFound();
+
+            return View(asset);
+        }
+
+        // POST: Assets/Delete/5
+        [HttpPost, ActionName("Delete")]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> DeleteConfirmed(int id)
+        {
+            var asset = await _context.Assets
+                .Include(a => a.Tickets)
+                .Include(a => a.MaintenanceRecords)
+                .Include(a => a.History)
+                .FirstOrDefaultAsync(a => a.Id == id);
+
+            if (asset != null)
+            {
+                var tag = asset.HospitalNo ?? ("#" + asset.Id);
+
+                // If asset has active tickets, prevent deletion
+                if (asset.Tickets.Any(t => t.StatusId != 5 && t.StatusId != 4))
+                {
+                    TempData["ErrorMessage"] = $"Cannot delete asset {tag} because it has open or pending tickets. Close or reassign tickets first, or retire the asset.";
+                    return RedirectToAction(nameof(Details), new { id });
+                }
+
+                _context.Assets.Remove(asset);
+                await _context.SaveChangesAsync();
+                TempData["SuccessMessage"] = $"Asset {tag} was deleted from inventory.";
+            }
+
+            return RedirectToAction(nameof(Index));
+        }
+
+        // GET: Assets/PrintTag/5
+        public async Task<IActionResult> PrintTag(int? id)
+        {
+            if (id == null) return NotFound();
+
+            var asset = await _context.Assets
+                .Include(a => a.User)
+                .Include(a => a.Room)
+                .Include(a => a.Supplier)
+                .FirstOrDefaultAsync(m => m.Id == id);
+
+            if (asset == null) return NotFound();
+
+            return View(asset);
+        }
+
+        // GET: Assets/ExportCsv
+        public async Task<IActionResult> ExportCsv(string? search, string? status, string? type, int? roomId)
+        {
+            var query = _context.Assets
+                .Include(a => a.User)
+                .Include(a => a.Room)
+                .Include(a => a.Supplier)
+                .Include(a => a.CustodyType)
+                .AsQueryable();
+
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                var s = search.Trim().ToLower();
+                query = query.Where(a =>
+                    (a.HospitalNo != null && a.HospitalNo.ToLower().Contains(s)) ||
+                    (a.SerialNo != null && a.SerialNo.ToLower().Contains(s)) ||
+                    (a.Brand != null && a.Brand.ToLower().Contains(s)) ||
+                    (a.Type != null && a.Type.ToLower().Contains(s)) ||
+                    (a.User != null && a.User.FullName != null && a.User.FullName.ToLower().Contains(s))
+                );
+            }
+
+            if (!string.IsNullOrWhiteSpace(status)) query = query.Where(a => a.Status == status);
+            if (!string.IsNullOrWhiteSpace(type)) query = query.Where(a => a.Type == type);
+            if (roomId.HasValue) query = query.Where(a => a.RoomId == roomId.Value);
+
+            var assets = await query.OrderBy(a => a.Id).ToListAsync();
+
+            var sb = new StringBuilder();
+            sb.AppendLine("ID,Hospital Tag,Serial Number,Brand,Model,Type,Status,Room Location,Custodian,Custody Type,Supplier,Price,Buying Date,Warranty Expiration,Needs Periodic,Next Periodic");
+
+            foreach (var a in assets)
+            {
+                sb.AppendLine($"\"{a.Id}\",\"{EscapeCsv(a.HospitalNo)}\",\"{EscapeCsv(a.SerialNo)}\",\"{EscapeCsv(a.Brand)}\",\"{a.ModelNo}\",\"{EscapeCsv(a.Type)}\",\"{EscapeCsv(a.Status)}\",\"{EscapeCsv(a.Room?.DisplayName)}\",\"{EscapeCsv(a.User?.FullName)}\",\"{EscapeCsv(a.CustodyType?.Type)}\",\"{EscapeCsv(a.Supplier?.Name)}\",\"{a.Price:F2}\",\"{a.BuyingDate:yyyy-MM-dd}\",\"{a.WarrantyTill:yyyy-MM-dd}\",\"{(a.NeedsPeriodic == true ? "Yes" : "No")}\",\"{a.NextPeriodic:yyyy-MM-dd}\"");
+            }
+
+            var bytes = Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(sb.ToString())).ToArray();
+            return File(bytes, "text/csv", $"Assets_Export_{DateTime.Now:yyyyMMdd_HHmm}.csv");
+        }
+
+        private static string EscapeCsv(string? value)
+        {
+            if (string.IsNullOrEmpty(value)) return "";
+            return value.Replace("\"", "\"\"");
         }
 
         private async Task PopulateDropdowns(Asset? asset = null)

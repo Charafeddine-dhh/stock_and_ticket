@@ -8,9 +8,14 @@
         <h4 class="fw-bold mb-0">Preventive Maintenance & Inspection Schedule</h4>
         <small class="text-muted">Track recurring hardware servicing, calibration cycles, and maintenance work logs</small>
     </div>
-    <a href="@Url.Action("Log")" class="btn btn-warning text-dark fw-semibold">
-        <i class="fa-solid fa-wrench me-1"></i> Log Maintenance Work
-    </a>
+    <div class="d-flex gap-2">
+        <a href="@Url.Action("ExportCsv")" class="btn btn-outline-success">
+            <i class="fa-solid fa-file-csv me-1"></i> Export CSV
+        </a>
+        <a href="@Url.Action("Log")" class="btn btn-warning text-dark fw-semibold">
+            <i class="fa-solid fa-wrench me-1"></i> Log Maintenance Work
+        </a>
+    </div>
 </div>
 
 <!-- Maintenance Overview Cards -->

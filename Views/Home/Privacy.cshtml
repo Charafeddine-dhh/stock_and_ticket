@@ -1,6 +1,53 @@
-﻿@{
-    ViewData["Title"] = "Privacy Policy";
+@inject StockPortal.Services.ICurrentUserService CurrentUser
+@{
+    ViewData["Title"] = "System Information & Security Compliance";
 }
-<h1>@ViewData["Title"]</h1>
 
-<p>Use this page to detail your site's privacy policy.</p>
+<div class="row justify-content-center">
+    <div class="col-lg-9">
+        <div class="card shadow-sm border-0 mb-4">
+            <div class="card-header bg-white py-3">
+                <h5 class="mb-0 fw-bold"><i class="fa-solid fa-shield-halved text-primary me-2"></i> System Architecture & Security Policy</h5>
+            </div>
+            <div class="card-body p-4">
+                <div class="row g-4 mb-4">
+                    <div class="col-md-6">
+                        <div class="p-3 bg-light rounded">
+                            <h6 class="fw-bold text-dark"><i class="fa-solid fa-windows text-primary me-2"></i> Windows Domain SSO</h6>
+                            <p class="small text-muted mb-2">Integrated Windows Domain authentication automatically recognizes authenticated staff credentials.</p>
+                            <ul class="list-unstyled small mb-0">
+                                <li><strong>Active Domain:</strong> @Environment.UserDomainName</li>
+                                <li><strong>Server Host:</strong> @Environment.MachineName</li>
+                                <li><strong>Current Session:</strong> @CurrentUser.GetFullName() (@CurrentUser.GetDomainUser())</li>
+                                <li><strong>Access Role:</strong> @CurrentUser.GetRole()</li>
+                            </ul>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="p-3 bg-light rounded">
+                            <h6 class="fw-bold text-dark"><i class="fa-solid fa-database text-success me-2"></i> Database Architecture</h6>
+                            <p class="small text-muted mb-2">Multi-provider Entity Framework Core schema supporting MariaDB/MySQL and SQLite.</p>
+                            <ul class="list-unstyled small mb-0">
+                                <li><strong>Runtime Platform:</strong> .NET 10.0 MVC</li>
+                                <li><strong>ORM Engine:</strong> Microsoft Entity Framework Core</li>
+                                <li><strong>Custody Audit Trail:</strong> Automated via <code>asset_history</code></li>
+                                <li><strong>Service Logging:</strong> Linked to <code>asset_maintenance</code></li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <h6 class="fw-bold text-dark">Data Governance & Asset Protection</h6>
+                <p class="text-muted small">
+                    This portal tracks high-value healthcare and enterprise IT hardware. All asset reassignments, location updates, maintenance interventions, and helpdesk actions are permanently recorded with timestamps and technician identities for ISO/HIPAA compliance and hardware lifecycle auditing.
+                </p>
+
+                <div class="border-top pt-3 mt-4 text-center">
+                    <a href="@Url.Action("Index", "Home")" class="btn btn-outline-primary">
+                        <i class="fa-solid fa-arrow-left me-1"></i> Return to Dashboard
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

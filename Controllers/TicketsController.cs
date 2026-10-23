@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using System.Text;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
@@ -7,7 +8,6 @@ using Microsoft.EntityFrameworkCore;
 using StockPortal.Data;
 using StockPortal.Models;
 using StockPortal.ViewModels;
-
 using StockPortal.Services;
 
 namespace StockPortal.Controllers
@@ -24,8 +24,10 @@ namespace StockPortal.Controllers
         }
 
         // GET: Tickets
-        public async Task<IActionResult> Index(int? statusId, int? priority, string? type, string? search)
+        public async Task<IActionResult> Index(int? statusId, int? priority, string? type, string? search, string? filter)
         {
+            var currentUserId = _currentUserService.GetUserId();
+
             var query = _context.Tickets
                 .Include(t => t.Asset)
                 .Include(t => t.OpenedByUser)
@@ -50,6 +52,23 @@ namespace StockPortal.Controllers
                 query = query.Where(t => t.Type == type);
             }
 
+            // Quick Filters
+            if (!string.IsNullOrWhiteSpace(filter))
+            {
+                if (filter == "my_assigned")
+                {
+                    query = query.Where(t => t.Handler != null && t.Handler.TechUserId == currentUserId);
+                }
+                else if (filter == "my_opened")
+                {
+                    query = query.Where(t => t.OpenedBy == currentUserId || t.OnBehalfOf == currentUserId);
+                }
+                else if (filter == "unassigned")
+                {
+                    query = query.Where(t => t.Handler == null || t.Handler.TechUserId == null);
+                }
+            }
+
             if (!string.IsNullOrWhiteSpace(search))
             {
                 var s = search.Trim().ToLower();
@@ -66,6 +85,7 @@ namespace StockPortal.Controllers
             ViewBag.SelectedPriority = priority;
             ViewBag.SelectedType = type;
             ViewBag.Search = search;
+            ViewBag.SelectedFilter = filter;
 
             ViewBag.Statuses = await _context.TicketStatuses.ToListAsync();
 
@@ -157,7 +177,7 @@ namespace StockPortal.Controllers
                     {
                         TicketId = ticket.Id,
                         UserId = ticket.OpenedBy,
-                        Msg = initialMessage,
+                        Msg = initialMessage.Trim(),
                         TimeStamp = DateTime.Now
                     });
                 }
@@ -193,6 +213,36 @@ namespace StockPortal.Controllers
             await _context.SaveChangesAsync();
 
             TempData["SuccessMessage"] = "Ticket status updated.";
+            return RedirectToAction(nameof(Details), new { id = ticketId });
+        }
+
+        // POST: Tickets/CloseTicket
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> CloseTicket(int ticketId, string? resolutionNotes)
+        {
+            var ticket = await _context.Tickets.FindAsync(ticketId);
+            if (ticket == null) return NotFound();
+
+            ticket.StatusId = 5; // closed
+            ticket.ClosedDT = DateTime.Now;
+            _context.Update(ticket);
+
+            var currentUserId = _currentUserService.GetUserId();
+
+            if (!string.IsNullOrWhiteSpace(resolutionNotes))
+            {
+                _context.TicketMessages.Add(new TicketMsg
+                {
+                    TicketId = ticketId,
+                    UserId = currentUserId,
+                    Msg = $"[RESOLUTION NOTE]: {resolutionNotes.Trim()}",
+                    TimeStamp = DateTime.Now
+                });
+            }
+
+            await _context.SaveChangesAsync();
+            TempData["SuccessMessage"] = $"Ticket #{ticketId} was resolved and closed.";
             return RedirectToAction(nameof(Details), new { id = ticketId });
         }
 
@@ -289,6 +339,81 @@ namespace StockPortal.Controllers
             await _context.SaveChangesAsync();
             TempData["SuccessMessage"] = "Maintenance record saved and linked to ticket!";
             return RedirectToAction(nameof(Details), new { id = ticketId });
+        }
+
+        // GET: Tickets/PrintTicket/5
+        public async Task<IActionResult> PrintTicket(int? id)
+        {
+            if (id == null) return NotFound();
+
+            var ticket = await _context.Tickets
+                .Include(t => t.Asset).ThenInclude(a => a!.Room)
+                .Include(t => t.Asset).ThenInclude(a => a!.Supplier)
+                .Include(t => t.OpenedByUser).ThenInclude(u => u!.Department)
+                .Include(t => t.OnBehalfOfUser)
+                .Include(t => t.Status)
+                .Include(t => t.Handler).ThenInclude(h => h!.TechUser)
+                .Include(t => t.Messages).ThenInclude(m => m.User)
+                .Include(t => t.MaintenanceLogs).ThenInclude(m => m.Technician)
+                .FirstOrDefaultAsync(m => m.Id == id);
+
+            if (ticket == null) return NotFound();
+
+            return View(ticket);
+        }
+
+        // GET: Tickets/ExportCsv
+        public async Task<IActionResult> ExportCsv(int? statusId, int? priority, string? type, string? search, string? filter)
+        {
+            var currentUserId = _currentUserService.GetUserId();
+
+            var query = _context.Tickets
+                .Include(t => t.Asset)
+                .Include(t => t.OpenedByUser)
+                .Include(t => t.Status)
+                .Include(t => t.Handler).ThenInclude(h => h!.TechUser)
+                .Include(t => t.Messages)
+                .AsQueryable();
+
+            if (statusId.HasValue && statusId.Value > 0) query = query.Where(t => t.StatusId == statusId.Value);
+            if (priority.HasValue && priority.Value > 0) query = query.Where(t => t.Priority == priority.Value);
+            if (!string.IsNullOrWhiteSpace(type)) query = query.Where(t => t.Type == type);
+
+            if (!string.IsNullOrWhiteSpace(filter))
+            {
+                if (filter == "my_assigned") query = query.Where(t => t.Handler != null && t.Handler.TechUserId == currentUserId);
+                else if (filter == "my_opened") query = query.Where(t => t.OpenedBy == currentUserId || t.OnBehalfOf == currentUserId);
+                else if (filter == "unassigned") query = query.Where(t => t.Handler == null || t.Handler.TechUserId == null);
+            }
+
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                var s = search.Trim().ToLower();
+                query = query.Where(t =>
+                    t.Id.ToString() == s ||
+                    (t.Asset != null && t.Asset.HospitalNo != null && t.Asset.HospitalNo.ToLower().Contains(s)) ||
+                    (t.OpenedByUser != null && t.OpenedByUser.FullName != null && t.OpenedByUser.FullName.ToLower().Contains(s))
+                );
+            }
+
+            var tickets = await query.OrderByDescending(t => t.OpenedDT).ToListAsync();
+
+            var sb = new StringBuilder();
+            sb.AppendLine("Ticket ID,Issue Category,Asset Tag,Asset Brand,Priority,Status,Requester,Assigned Technician,Opened Date,Closed Date,Total Messages");
+
+            foreach (var t in tickets)
+            {
+                sb.AppendLine($"\"{t.Id}\",\"{EscapeCsv(t.Type)}\",\"{EscapeCsv(t.Asset?.HospitalNo)}\",\"{EscapeCsv(t.Asset?.Brand)}\",\"{t.PriorityName}\",\"{EscapeCsv(t.Status?.Status)}\",\"{EscapeCsv(t.OpenedByUser?.FullName)}\",\"{EscapeCsv(t.Handler?.TechUser?.FullName ?? "Unassigned")}\",\"{t.OpenedDT:yyyy-MM-dd HH:mm}\",\"{t.ClosedDT:yyyy-MM-dd HH:mm}\",\"{t.Messages.Count}\"");
+            }
+
+            var bytes = Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(sb.ToString())).ToArray();
+            return File(bytes, "text/csv", $"Tickets_Export_{DateTime.Now:yyyyMMdd_HHmm}.csv");
+        }
+
+        private static string EscapeCsv(string? value)
+        {
+            if (string.IsNullOrEmpty(value)) return "";
+            return value.Replace("\"", "\"\"");
         }
 
         private async Task PopulateDropdowns(int? selectedAssetId = null, int? defaultUserId = null)

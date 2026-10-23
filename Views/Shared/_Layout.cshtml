@@ -1,4 +1,5 @@
 @inject StockPortal.Services.ICurrentUserService CurrentUser
+@inject StockPortal.Data.StockDbContext DbContext
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -205,6 +206,17 @@
             </div>
         </a>
 
+        @{
+            int openTicketsCount = 0;
+            int overdueMaintCount = 0;
+            try
+            {
+                openTicketsCount = DbContext.Tickets.Count(t => t.StatusId == 1 || t.StatusId == 2);
+                var today = DateTime.Now.Date;
+                overdueMaintCount = DbContext.Assets.Count(a => a.NeedsPeriodic == true && a.NextPeriodic.HasValue && a.NextPeriodic.Value < today);
+            }
+            catch {}
+        }
         <ul class="sidebar-nav">
             <li class="nav-category">Operations</li>
             <li>
@@ -222,13 +234,21 @@
             <li>
                 <a href="@Url.Action("Index", "Tickets")" class="nav-link @(ViewContext.RouteData.Values["Controller"]?.ToString() == "Tickets" ? "active" : "")">
                     <i class="fa-solid fa-ticket"></i>
-                    <span>Tickets & Helpdesk</span>
+                    <span class="flex-grow-1">Tickets & Helpdesk</span>
+                    @if (openTicketsCount > 0)
+                    {
+                        <span class="badge bg-danger rounded-pill" style="font-size: 0.7rem;">@openTicketsCount</span>
+                    }
                 </a>
             </li>
             <li>
                 <a href="@Url.Action("Index", "Maintenance")" class="nav-link @(ViewContext.RouteData.Values["Controller"]?.ToString() == "Maintenance" ? "active" : "")">
                     <i class="fa-solid fa-screwdriver-wrench"></i>
-                    <span>Maintenance Schedule</span>
+                    <span class="flex-grow-1">Maintenance</span>
+                    @if (overdueMaintCount > 0)
+                    {
+                        <span class="badge bg-warning text-dark rounded-pill" style="font-size: 0.7rem;">@overdueMaintCount</span>
+                    }
                 </a>
             </li>
 

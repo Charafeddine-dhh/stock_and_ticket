@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using System.Text;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
@@ -38,7 +39,7 @@ namespace StockPortal.Controllers
                 .Include(m => m.Supplier)
                 .Include(m => m.Ticket)
                 .OrderByDescending(m => m.TimStamp)
-                .Take(25)
+                .Take(50)
                 .ToListAsync();
 
             var vm = new MaintenanceScheduleViewModel
@@ -111,6 +112,66 @@ namespace StockPortal.Controllers
 
             await PopulateDropdowns(maintenance.AssetId);
             return View(maintenance);
+        }
+
+        // POST: Maintenance/QuickCompleteCheckup
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> QuickCompleteCheckup(int assetId, int technicianId, string? notes)
+        {
+            var asset = await _context.Assets.FindAsync(assetId);
+            if (asset == null) return NotFound();
+
+            var record = new AssetMaintenance
+            {
+                AssetId = assetId,
+                UserId = technicianId,
+                MaintenanceType = 2, // Periodic Check
+                Description = string.IsNullOrWhiteSpace(notes) ? "Routine periodic inspection completed." : notes.Trim(),
+                TimStamp = DateTime.Now
+            };
+
+            _context.AssetMaintenances.Add(record);
+
+            if (asset.PeriodicInterval.HasValue)
+            {
+                asset.LastPeriodic = DateTime.Now;
+                asset.NextPeriodic = DateTime.Now.AddDays(asset.PeriodicInterval.Value);
+                _context.Update(asset);
+            }
+
+            await _context.SaveChangesAsync();
+            TempData["SuccessMessage"] = $"Periodic check completed for asset {asset.HospitalNo ?? ("#" + asset.Id)}.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        // GET: Maintenance/ExportCsv
+        public async Task<IActionResult> ExportCsv()
+        {
+            var logs = await _context.AssetMaintenances
+                .Include(m => m.Asset)
+                .Include(m => m.Technician)
+                .Include(m => m.Supplier)
+                .Include(m => m.Ticket)
+                .OrderByDescending(m => m.TimStamp)
+                .ToListAsync();
+
+            var sb = new StringBuilder();
+            sb.AppendLine("ID,Date,Asset Tag,Asset Brand,Maintenance Type,Technician,Supplier,Ticket ID,Description,Parts Replaced");
+
+            foreach (var m in logs)
+            {
+                sb.AppendLine($"\"{m.Id}\",\"{m.TimStamp:yyyy-MM-dd HH:mm}\",\"{EscapeCsv(m.Asset?.HospitalNo)}\",\"{EscapeCsv(m.Asset?.Brand)}\",\"{EscapeCsv(m.TypeName)}\",\"{EscapeCsv(m.Technician?.FullName)}\",\"{EscapeCsv(m.Supplier?.Name)}\",\"{(m.TicketId.HasValue ? "#" + m.TicketId.Value : "Direct")}\",\"{EscapeCsv(m.Description)}\",\"{EscapeCsv(m.PartsReplaced)}\"");
+            }
+
+            var bytes = Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(sb.ToString())).ToArray();
+            return File(bytes, "text/csv", $"Maintenance_Logs_Export_{DateTime.Now:yyyyMMdd_HHmm}.csv");
+        }
+
+        private static string EscapeCsv(string? value)
+        {
+            if (string.IsNullOrEmpty(value)) return "";
+            return value.Replace("\"", "\"\"");
         }
 
         private async Task PopulateDropdowns(int? selectedAssetId = null)

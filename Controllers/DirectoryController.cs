@@ -1,3 +1,4 @@
+using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
@@ -42,6 +43,22 @@ namespace StockPortal.Controllers
             return RedirectToAction(nameof(Index));
         }
 
+        // POST: Directory/ToggleUserStatus
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> ToggleUserStatus(int id)
+        {
+            var user = await _context.Users.FindAsync(id);
+            if (user != null)
+            {
+                user.IsActive = !(user.IsActive ?? true);
+                _context.Update(user);
+                await _context.SaveChangesAsync();
+                TempData["SuccessMessage"] = $"User {user.FullName} status set to {(user.IsActive == true ? "Active" : "Inactive")}.";
+            }
+            return RedirectToAction(nameof(Index));
+        }
+
         // POST: Directory/CreateRoom
         [HttpPost]
         [ValidateAntiForgeryToken]
@@ -52,6 +69,28 @@ namespace StockPortal.Controllers
                 _context.Rooms.Add(room);
                 await _context.SaveChangesAsync();
                 TempData["SuccessMessage"] = $"Room {room.RoomNo} (Floor {room.Floor}) created.";
+            }
+            return RedirectToAction(nameof(Index));
+        }
+
+        // POST: Directory/DeleteRoom
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> DeleteRoom(int id)
+        {
+            var room = await _context.Rooms.Include(r => r.Assets).FirstOrDefaultAsync(r => r.Id == id);
+            if (room != null)
+            {
+                if (room.Assets.Any())
+                {
+                    TempData["ErrorMessage"] = $"Cannot delete Room {room.RoomNo} because it has {room.Assets.Count} assets assigned to it.";
+                }
+                else
+                {
+                    _context.Rooms.Remove(room);
+                    await _context.SaveChangesAsync();
+                    TempData["SuccessMessage"] = $"Room {room.RoomNo} deleted.";
+                }
             }
             return RedirectToAction(nameof(Index));
         }
@@ -71,6 +110,22 @@ namespace StockPortal.Controllers
             return RedirectToAction(nameof(Index));
         }
 
+        // POST: Directory/ToggleSupplierStatus
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> ToggleSupplierStatus(int id)
+        {
+            var supplier = await _context.Suppliers.FindAsync(id);
+            if (supplier != null)
+            {
+                supplier.IsActive = !(supplier.IsActive ?? true);
+                _context.Update(supplier);
+                await _context.SaveChangesAsync();
+                TempData["SuccessMessage"] = $"Supplier {supplier.Name} set to {(supplier.IsActive == true ? "Active" : "Inactive")}.";
+            }
+            return RedirectToAction(nameof(Index));
+        }
+
         // POST: Directory/CreateDepartment
         [HttpPost]
         [ValidateAntiForgeryToken]
@@ -81,6 +136,28 @@ namespace StockPortal.Controllers
                 _context.Departments.Add(department);
                 await _context.SaveChangesAsync();
                 TempData["SuccessMessage"] = $"Department {department.Name} created.";
+            }
+            return RedirectToAction(nameof(Index));
+        }
+
+        // POST: Directory/DeleteDepartment
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> DeleteDepartment(int id)
+        {
+            var dept = await _context.Departments.Include(d => d.Users).FirstOrDefaultAsync(d => d.Id == id);
+            if (dept != null)
+            {
+                if (dept.Users.Any())
+                {
+                    TempData["ErrorMessage"] = $"Cannot delete Department {dept.Name} because it has {dept.Users.Count} active users.";
+                }
+                else
+                {
+                    _context.Departments.Remove(dept);
+                    await _context.SaveChangesAsync();
+                    TempData["SuccessMessage"] = $"Department {dept.Name} removed.";
+                }
             }
             return RedirectToAction(nameof(Index));
         }

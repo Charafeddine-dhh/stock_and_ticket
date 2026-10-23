@@ -2,32 +2,54 @@
 @{
     ViewData["Title"] = "Service & Support Tickets";
     var statuses = ViewBag.Statuses as List<StockPortal.Models.TicketStatus> ?? new();
+    var currentFilter = ViewBag.SelectedFilter as string;
 }
 
 <!-- Header & Quick Stats Navigation -->
 <div class="d-flex justify-content-between align-items-center mb-4">
     <div>
         <h4 class="fw-bold mb-0">Helpdesk & Support Tickets</h4>
-        <small class="text-muted">Manage technical service tickets, technician dispatches, and issue resolutions</small>
+        <small class="text-muted">Manage service tickets, technician dispatches, and issue resolutions</small>
     </div>
-    <a href="@Url.Action("Create")" class="btn btn-primary">
-        <i class="fa-solid fa-plus me-1"></i> Open New Ticket
-    </a>
+    <div class="d-flex gap-2">
+        <a href="@Url.Action("ExportCsv", new { statusId = ViewBag.SelectedStatusId, priority = ViewBag.SelectedPriority, type = ViewBag.SelectedType, search = ViewBag.Search, filter = currentFilter })" class="btn btn-outline-success">
+            <i class="fa-solid fa-file-csv me-1"></i> Export CSV
+        </a>
+        <a href="@Url.Action("Create")" class="btn btn-primary">
+            <i class="fa-solid fa-plus me-1"></i> Open New Ticket
+        </a>
+    </div>
 </div>
 
-<!-- Filter Tabs Toolbar -->
+<!-- Quick Assignment Pills & Filter Toolbar -->
 <div class="card shadow-sm border-0 mb-4">
     <div class="card-body p-3">
+        <!-- Quick View Tabs -->
+        <div class="d-flex flex-wrap gap-2 mb-3 pb-3 border-bottom">
+            <a href="@Url.Action("Index")" class="btn btn-sm @(string.IsNullOrEmpty(currentFilter) && ViewBag.SelectedStatusId == null ? "btn-primary" : "btn-light border")">
+                <i class="fa-solid fa-inbox me-1"></i> All Tickets
+            </a>
+            <a href="@Url.Action("Index", new { filter = "my_assigned" })" class="btn btn-sm @(currentFilter == "my_assigned" ? "btn-primary" : "btn-light border")">
+                <i class="fa-solid fa-user-check me-1"></i> My Assigned Tickets
+            </a>
+            <a href="@Url.Action("Index", new { filter = "my_opened" })" class="btn btn-sm @(currentFilter == "my_opened" ? "btn-primary" : "btn-light border")">
+                <i class="fa-solid fa-user-pen me-1"></i> Opened by Me
+            </a>
+            <a href="@Url.Action("Index", new { filter = "unassigned" })" class="btn btn-sm @(currentFilter == "unassigned" ? "btn-warning text-dark fw-bold" : "btn-light border text-warning-emphasis")">
+                <i class="fa-solid fa-triangle-exclamation me-1"></i> Unassigned
+            </a>
+        </div>
+
         <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
             <!-- Status Tabs -->
             <div class="btn-group" role="group">
-                <a href="@Url.Action("Index", new { priority = ViewBag.SelectedPriority, type = ViewBag.SelectedType })" 
-                   class="btn btn-sm @(ViewBag.SelectedStatusId == null ? "btn-primary" : "btn-outline-secondary")">
-                    All Tickets
+                <a href="@Url.Action("Index", new { priority = ViewBag.SelectedPriority, type = ViewBag.SelectedType, filter = currentFilter })" 
+                   class="btn btn-sm @(ViewBag.SelectedStatusId == null ? "btn-secondary" : "btn-outline-secondary")">
+                    All Statuses
                 </a>
                 @foreach (var st in statuses)
                 {
-                    <a href="@Url.Action("Index", new { statusId = st.Id, priority = ViewBag.SelectedPriority, type = ViewBag.SelectedType })" 
+                    <a href="@Url.Action("Index", new { statusId = st.Id, priority = ViewBag.SelectedPriority, type = ViewBag.SelectedType, filter = currentFilter })" 
                        class="btn btn-sm @(ViewBag.SelectedStatusId == st.Id ? "btn-primary" : "btn-outline-secondary")">
                         @st.Status
                     </a>
@@ -37,6 +59,8 @@
             <!-- Priority & Search filters -->
             <form method="get" class="d-flex gap-2 align-items-center">
                 <input type="hidden" name="statusId" value="@ViewBag.SelectedStatusId" />
+                <input type="hidden" name="filter" value="@currentFilter" />
+
                 <select name="priority" class="form-select form-select-sm" onchange="this.form.submit()">
                     <option value="">All Priorities</option>
                     <option value="4" selected="@(ViewBag.SelectedPriority == 4)">Urgent</option>
@@ -53,8 +77,9 @@
                     <option value="Network" selected="@(ViewBag.SelectedType == "Network")">Network</option>
                 </select>
 
-                <input type="text" name="search" value="@ViewBag.Search" class="form-control form-control-sm" placeholder="Search ticket #, asset, user..." style="width: 220px;" />
+                <input type="text" name="search" value="@ViewBag.Search" class="form-control form-control-sm" placeholder="Ticket #, asset, user..." style="width: 200px;" />
                 <button type="submit" class="btn btn-sm btn-outline-primary"><i class="fa-solid fa-magnifying-glass"></i></button>
+                <a href="@Url.Action("Index")" class="btn btn-sm btn-outline-secondary" title="Clear Filters"><i class="fa-solid fa-rotate-left"></i></a>
             </form>
         </div>
     </div>
@@ -84,7 +109,7 @@
                         <tr>
                             <td colspan="9" class="text-center text-muted py-5">
                                 <i class="fa-solid fa-ticket fa-2x mb-2 text-secondary"></i>
-                                <div>No tickets found in this view.</div>
+                                <div>No tickets found matching this filter view.</div>
                             </td>
                         </tr>
                     }

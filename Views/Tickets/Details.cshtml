@@ -24,6 +24,15 @@
         </div>
     </div>
     <div class="d-flex gap-2">
+        <a href="@Url.Action("PrintTicket", new { id = ticket.Id })" class="btn btn-outline-dark" target="_blank">
+            <i class="fa-solid fa-print me-1"></i> Print Work Order
+        </a>
+        @if (ticket.StatusId != 5)
+        {
+            <button type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#closeTicketModal">
+                <i class="fa-solid fa-check-double me-1"></i> Resolve & Close
+            </button>
+        }
         <button type="button" class="btn btn-warning text-dark" data-bs-toggle="modal" data-bs-target="#maintenanceModal">
             <i class="fa-solid fa-wrench me-1"></i> Log Maintenance Work
         </button>
@@ -298,6 +307,36 @@
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
                     <button type="submit" class="btn btn-warning text-dark fw-semibold">Save Maintenance Record</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Resolve & Close Ticket -->
+<div class="modal fade" id="closeTicketModal" tabindex="-1" aria-labelledby="closeTicketModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form asp-action="CloseTicket" method="post">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="ticketId" value="@ticket.Id" />
+
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold" id="closeTicketModalLabel"><i class="fa-solid fa-check-circle text-success me-2"></i> Resolve & Close Ticket #@ticket.Id</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted small">
+                        Closing this ticket marks the issue as resolved, sets the closed timestamp, and notifies the requester.
+                    </p>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Resolution Summary & Solution</label>
+                        <textarea name="resolutionNotes" class="form-control" rows="3" placeholder="Explain what resolved the problem or what steps were completed..." required></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-success fw-semibold"><i class="fa-solid fa-check me-1"></i> Confirm & Close Ticket</button>
                 </div>
             </form>
         </div>
