@@ -101,7 +101,40 @@
 </head>
 <body>
     <div class="auth-card">
-        @if (isTicketSubmitted)
+        @if (reason.Equals("ForbiddenResource", StringComparison.OrdinalIgnoreCase))
+        {
+            var currentUser = ViewBag.CurrentUser as StockPortal.Models.User;
+            <div class="auth-header">
+                <div class="icon-circle icon-inactive">
+                    <i class="fa-solid fa-ban"></i>
+                </div>
+                <h3 class="fw-bold text-danger mb-2">403 - Access Forbidden</h3>
+                <p class="text-muted mb-0">
+                    You do not have permission to view or modify the requested resource.
+                </p>
+            </div>
+            <div class="px-4 pb-4">
+                <div class="alert alert-warning border-0 small mb-4">
+                    <div><strong>Logged In Identity:</strong> @(currentUser?.FullName ?? "Staff Member") (@(currentUser?.Role ?? "END_USER"))</div>
+                    @if (currentUser != null && !string.IsNullOrWhiteSpace(currentUser.MaintenanceTeam))
+                    {
+                        <div><strong>Assigned Team:</strong> @currentUser.MaintenanceTeam Maintenance</div>
+                    }
+                    <div class="mt-2 text-dark">
+                        Under Role-Based Access Control (RBAC), hospital equipment and tickets belonging to other departments cannot be viewed or edited.
+                    </div>
+                </div>
+                <div class="d-grid gap-2 mb-3">
+                    <a href="@Url.Action("Index", "Home")" class="btn btn-primary">
+                        <i class="fa-solid fa-house me-1"></i> Return to Main Dashboard
+                    </a>
+                    <a href="@Url.Action("Index", "Assets")" class="btn btn-outline-secondary">
+                        <i class="fa-solid fa-boxes-stacked me-1"></i> Back to Hospital Assets
+                    </a>
+                </div>
+            </div>
+        }
+        else if (isTicketSubmitted)
         {
             <div class="auth-header">
                 <div class="icon-circle icon-submitted">

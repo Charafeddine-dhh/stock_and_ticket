@@ -162,7 +162,8 @@ namespace StockPortal.Tests
             var currentUserService = new CurrentUserService(mockAccessor.Object);
 
             Assert.False(currentUserService.CanManageUsers());
-            Assert.False(currentUserService.CanManageAssets());
+            // Maintenance technicians have permission to manage assets in their team scope
+            Assert.True(currentUserService.CanManageAssets());
         }
 
         [Fact]
@@ -403,15 +404,20 @@ namespace StockPortal.Tests
         public async Task AssetsController_ForbidsEndUserFromCreatingOrModifyingAssets()
         {
             using var context = CreateInMemoryDbContext();
+            context.Assets.Add(new Asset { Id = 1, HospitalNo = "TEST-01" });
+            await context.SaveChangesAsync();
+
             var mockEndUser = new Mock<ICurrentUserService>();
             mockEndUser.Setup(s => s.CanManageAssets()).Returns(false);
+            mockEndUser.Setup(s => s.CanAccessAsset(It.IsAny<Asset>())).Returns(false);
+            mockEndUser.Setup(s => s.CanManageAsset(It.IsAny<Asset>())).Returns(false);
 
             var assetsController = new AssetsController(context, mockEndUser.Object);
 
             var createGet = await assetsController.Create();
             Assert.IsType<ForbidResult>(createGet);
 
-            var createPost = await assetsController.Create(new Asset { HospitalNo = "TEST" });
+            var createPost = await assetsController.Create(new Asset { HospitalNo = "TEST" }, deviceFormId: 1, new FormCollection(new()));
             Assert.IsType<ForbidResult>(createPost);
 
             var editGet = await assetsController.Edit(1);
@@ -448,6 +454,70 @@ namespace StockPortal.Tests
 
             var assignTechResult = await ticketsController.AssignTechnician(ticket.Id, techUserId: 2);
             Assert.IsType<ForbidResult>(assignTechResult);
+        }
+
+        [Fact]
+        public async Task AssetsController_ForbidsMaintenanceUserFromEditingOtherDepartmentAsset()
+        {
+            using var context = CreateInMemoryDbContext();
+            var bioAsset = new Asset
+            {
+                Id = 99,
+                HospitalNo = "HOSP-BIO-99",
+                MaintenanceTeam = MaintenanceTeams.Biomedical
+            };
+            context.Assets.Add(bioAsset);
+            await context.SaveChangesAsync();
+
+            // IT technician attempts URL tampering by navigating to Edit/99
+            var mockItTech = new Mock<ICurrentUserService>();
+            mockItTech.Setup(s => s.CanAccessAsset(It.Is<Asset>(a => a.MaintenanceTeam == MaintenanceTeams.Biomedical))).Returns(false);
+            mockItTech.Setup(s => s.CanManageAsset(It.Is<Asset>(a => a.MaintenanceTeam == MaintenanceTeams.Biomedical))).Returns(false);
+
+            var assetsController = new AssetsController(context, mockItTech.Object);
+
+            var editGetResult = await assetsController.Edit(bioAsset.Id);
+            Assert.IsType<ForbidResult>(editGetResult);
+        }
+
+        [Fact]
+        public void AccountController_SwitchUser_RequiresHttpPostAttribute()
+        {
+            var method = typeof(AccountController).GetMethod(nameof(AccountController.SwitchUser));
+            Assert.NotNull(method);
+
+            var httpPostAttr = Attribute.GetCustomAttribute(method, typeof(HttpPostAttribute));
+            Assert.NotNull(httpPostAttr);
+
+            var validateAntiCsrf = Attribute.GetCustomAttribute(method, typeof(ValidateAntiForgeryTokenAttribute));
+            Assert.NotNull(validateAntiCsrf);
+        }
+
+        [Fact]
+        public async Task DeviceFormsController_MaintenanceUser_OnlyReturnsTheirDepartmentTemplates()
+        {
+            using var context = CreateInMemoryDbContext();
+            context.DeviceForms.AddRange(
+                new DeviceForm { Id = 1, Name = "Laptop", Department = MaintenanceTeams.IT, Form = "[]" },
+                new DeviceForm { Id = 2, Name = "Switch", Department = MaintenanceTeams.IT, Form = "[]" },
+                new DeviceForm { Id = 3, Name = "Ventilator", Department = MaintenanceTeams.Biomedical, Form = "[]" },
+                new DeviceForm { Id = 4, Name = "Chiller", Department = MaintenanceTeams.General, Form = "[]" }
+            );
+            await context.SaveChangesAsync();
+
+            var mockItTech = new Mock<ICurrentUserService>();
+            mockItTech.Setup(s => s.CanManageDeviceForms()).Returns(true);
+            mockItTech.Setup(s => s.IsMaintenance()).Returns(true);
+            mockItTech.Setup(s => s.GetMaintenanceTeam()).Returns(MaintenanceTeams.IT);
+
+            var controller = new DeviceFormsController(context, mockItTech.Object);
+            var result = await controller.Index();
+
+            var viewResult = Assert.IsType<ViewResult>(result);
+            var model = Assert.IsAssignableFrom<List<DeviceForm>>(viewResult.Model);
+
+            Assert.Equal(2, model.Count);
+            Assert.All(model, f => Assert.Equal(MaintenanceTeams.IT, f.Department));
         }
     }
 }

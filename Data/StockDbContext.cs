@@ -21,6 +21,7 @@ namespace StockPortal.Data
         public DbSet<TicketMsg> TicketMessages { get; set; } = null!;
         public DbSet<TicketStatus> TicketStatuses { get; set; } = null!;
         public DbSet<User> Users { get; set; } = null!;
+        public DbSet<DeviceForm> DeviceForms { get; set; } = null!;
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {

@@ -11,15 +11,15 @@
 <!-- Filter & Search Toolbar -->
 <div class="card shadow-sm mb-4 border-0">
     <div class="card-body p-3">
-        <form method="get" class="row g-2 align-items-center">
+        <form method="get" class="row g-2 align-items-center" id="assetsFilterForm">
             <div class="col-md-3">
                 <div class="input-group">
                     <span class="input-group-text bg-white border-end-0 text-muted"><i class="fa-solid fa-magnifying-glass"></i></span>
-                    <input type="text" name="search" value="@ViewBag.Search" class="form-control border-start-0 ps-0" placeholder="Tag, Serial, Brand, User...">
+                    <input type="text" name="search" id="assetSearchInput" value="@ViewBag.Search" class="form-control border-start-0 ps-0" placeholder="Type to search (Tag, Serial, Brand, User)..." autocomplete="off">
                 </div>
             </div>
             <div class="col-md-2">
-                <select name="status" class="form-select">
+                <select name="status" class="form-select" onchange="this.form.submit()">
                     <option value="">All Statuses</option>
                     <option value="In Service" selected="@(ViewBag.SelectedStatus == "In Service")">In Service</option>
                     <option value="In Stock" selected="@(ViewBag.SelectedStatus == "In Stock")">In Stock (Spare)</option>
@@ -28,7 +28,7 @@
                 </select>
             </div>
             <div class="col-md-2">
-                <select name="type" class="form-select">
+                <select name="type" class="form-select" onchange="this.form.submit()">
                     <option value="">All Equipment Types</option>
                     @foreach (var t in types)
                     {
@@ -37,7 +37,7 @@
                 </select>
             </div>
             <div class="col-md-2">
-                <select name="roomId" class="form-select">
+                <select name="roomId" class="form-select" onchange="this.form.submit()">
                     <option value="">All Locations</option>
                     @foreach (var r in rooms)
                     {
@@ -46,16 +46,15 @@
                 </select>
             </div>
             <div class="col-md-2">
-                <select name="warranty" class="form-select">
+                <select name="warranty" class="form-select" onchange="this.form.submit()">
                     <option value="">All Warranties</option>
                     <option value="active" selected="@(selectedWarranty == "active")">Warranty Active</option>
                     <option value="expiring30" selected="@(selectedWarranty == "expiring30")">Expiring in 30 Days</option>
                     <option value="expired" selected="@(selectedWarranty == "expired")">Warranty Expired</option>
                 </select>
             </div>
-            <div class="col-md-1 d-flex gap-1">
-                <button type="submit" class="btn btn-primary w-100" title="Apply Filters"><i class="fa-solid fa-filter"></i></button>
-                <a href="@Url.Action("Index")" class="btn btn-outline-secondary" title="Reset Filters"><i class="fa-solid fa-rotate-left"></i></a>
+            <div class="col-md-1">
+                <a href="@Url.Action("Index")" class="btn btn-outline-secondary w-100" title="Reset Filters"><i class="fa-solid fa-rotate-left me-1"></i> Reset</a>
             </div>
         </form>
     </div>
@@ -207,7 +206,7 @@
                                     <a href="@Url.Action("PrintTag", new { id = item.Id })" class="btn btn-outline-dark" title="Print Barcode Tag" target="_blank">
                                         <i class="fa-solid fa-print"></i>
                                     </a>
-                                    @if (canManage)
+                                    @if (CurrentUser.CanManageAsset(item))
                                     {
                                         <a href="@Url.Action("Edit", new { id = item.Id })" class="btn btn-outline-secondary" title="Edit Asset">
                                             <i class="fa-solid fa-pen"></i>
@@ -216,11 +215,14 @@
                                     <a href="@Url.Action("Create", "Tickets", new { assetId = item.Id })" class="btn btn-outline-warning" title="Open Ticket for Asset">
                                         <i class="fa-solid fa-ticket"></i>
                                     </a>
-                                    @if (canManage)
+                                    @if (CurrentUser.IsAdmin())
                                     {
-                                        <a href="@Url.Action("Delete", new { id = item.Id })" class="btn btn-outline-danger" title="Delete or Retire Asset">
-                                            <i class="fa-solid fa-trash-can"></i>
-                                        </a>
+                                        <form method="post" asp-action="Delete" asp-route-id="@item.Id" class="d-inline" onsubmit="return confirm('Are you sure you want to delete asset @item.HospitalNo?');">
+                                            @Html.AntiForgeryToken()
+                                            <button type="submit" class="btn btn-outline-danger" title="Delete Asset">
+                                                <i class="fa-solid fa-trash-can"></i>
+                                            </button>
+                                        </form>
                                     }
                                 </div>
                             </td>
@@ -231,6 +233,26 @@
         </div>
     </div>
 </div>
-        </div>
-    </div>
-</div>
+
+@section Scripts {
+<script>
+    document.addEventListener("DOMContentLoaded", function () {
+        const searchInput = document.getElementById("assetSearchInput");
+        if (searchInput) {
+            let debounceTimer;
+            searchInput.addEventListener("input", function () {
+                clearTimeout(debounceTimer);
+                debounceTimer = setTimeout(() => {
+                    this.form.submit();
+                }, 400);
+            });
+            // Focus and put cursor at end of input if search has value
+            if (searchInput.value) {
+                const len = searchInput.value.length;
+                searchInput.focus();
+                searchInput.setSelectionRange(len, len);
+            }
+        }
+    });
+</script>
+}

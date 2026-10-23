@@ -1,33 +1,105 @@
 @model StockPortal.Models.Asset
+@inject StockPortal.Services.ICurrentUserService CurrentUser
 @{
     ViewData["Title"] = $"Edit Asset: {Model.HospitalNo ?? ("#" + Model.Id)}";
+    var deviceForm = ViewBag.DeviceForm as StockPortal.Models.DeviceForm;
+    var specsDict = ViewBag.SpecsDictionary as Dictionary<string, string> ?? new();
+    bool isMaintenance = CurrentUser.IsMaintenance();
 }
 
 <div class="row justify-content-center">
     <div class="col-lg-10">
         <div class="card shadow-sm border-0">
-            <div class="card-header bg-white py-3">
-                <h5 class="mb-0 fw-bold"><i class="fa-solid fa-pen-to-square text-primary me-2"></i> Edit Asset: @(Model.HospitalNo ?? $"Asset #{Model.Id}")</h5>
+            <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+                <h5 class="mb-0 fw-bold"><i class="fa-solid fa-pen-to-square text-primary me-2"></i> Edit Equipment: @(Model.HospitalNo ?? $"Asset #{Model.Id}")</h5>
+                <span class="badge @(Model.MaintenanceTeam == "BIOMEDICAL" ? "bg-info text-dark" : Model.MaintenanceTeam == "GENERAL" ? "bg-warning text-dark" : "bg-primary")">
+                    @Model.MaintenanceTeam Maintenance
+                </span>
             </div>
             <div class="card-body p-4">
-                <form asp-action="Edit" method="post">
+                <form asp-action="Edit" asp-route-id="@Model.Id" method="post" id="assetEditForm">
                     @Html.AntiForgeryToken()
                     <input type="hidden" asp-for="Id" />
+                    <input type="hidden" asp-for="MaintenanceTeam" />
+                    <input type="hidden" asp-for="Type" />
+                    <input type="hidden" name="deviceFormId" value="@(deviceForm?.Id ?? 0)" />
                     <div asp-validation-summary="ModelOnly" class="text-danger mb-3"></div>
 
-                    <h6 class="fw-bold text-muted text-uppercase mb-3 pb-2 border-bottom">1. Identification & Classification</h6>
+                    <!-- 1. Technical Specifications Form -->
+                    <div class="card shadow-sm border mb-4">
+                        <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+                            <h6 class="fw-bold mb-0 text-dark">
+                                <i class="fa-solid fa-microchip text-primary me-2"></i> 
+                                @(deviceForm != null ? $"{deviceForm.Name} Specifications" : "Technical Specifications")
+                            </h6>
+                            @if (deviceForm != null)
+                            {
+                                <span class="badge bg-light text-muted border">Template: @deviceForm.Name</span>
+                            }
+                        </div>
+                        <div class="card-body p-4">
+                            @if (deviceForm != null && deviceForm.Fields.Any())
+                            {
+                                <div class="row g-3">
+                                    @foreach (var field in deviceForm.Fields)
+                                    {
+                                        specsDict.TryGetValue(field.Name, out var currentVal);
+                                        <div class="@(field.Type == "textarea" ? "col-12" : "col-md-6")">
+                                            <label class="form-label fw-semibold">
+                                                @field.Label @(field.Required ? Html.Raw("<span class='text-danger'>*</span>") : null)
+                                            </label>
+                                            @if (field.Type == "select")
+                                            {
+                                                <select name="spec_@field.Name" class="form-select" @(field.Required ? "required" : "")>
+                                                    <option value="">-- Select @field.Label --</option>
+                                                    @foreach (var opt in field.Options)
+                                                    {
+                                                        <option value="@opt" selected="@(currentVal == opt)">@opt</option>
+                                                    }
+                                                </select>
+                                            }
+                                            else if (field.Type == "textarea")
+                                            {
+                                                <textarea name="spec_@field.Name" class="form-control" rows="2" placeholder="@field.Placeholder" @(field.Required ? "required" : "")>@currentVal</textarea>
+                                            }
+                                            else
+                                            {
+                                                <input type="@(field.Type == "number" ? "number" : "text")" 
+                                                       name="spec_@field.Name" 
+                                                       value="@currentVal" 
+                                                       class="form-control" 
+                                                       placeholder="@field.Placeholder" 
+                                                       @(field.Required ? "required" : "") />
+                                            }
+                                        </div>
+                                    }
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="mb-3">
+                                    <label asp-for="Specs" class="form-label fw-semibold">Raw Specifications</label>
+                                    <textarea asp-for="Specs" class="form-control font-monospace" rows="3"></textarea>
+                                </div>
+                            }
+                        </div>
+                    </div>
+
+                    <!-- 2. Identification Details -->
+                    <h6 class="fw-bold text-muted text-uppercase mb-3 pb-2 border-bottom">2. Equipment Identification</h6>
                     <div class="row g-3 mb-4">
                         <div class="col-md-4">
-                            <label asp-for="HospitalNo" class="form-label fw-semibold">Asset Tag / Hospital No</label>
+                            <label asp-for="HospitalNo" class="form-label fw-semibold">Asset Tag / Tag No</label>
                             <input asp-for="HospitalNo" class="form-control" required />
+                            <span asp-validation-for="HospitalNo" class="text-danger small"></span>
                         </div>
                         <div class="col-md-4">
                             <label asp-for="SerialNo" class="form-label fw-semibold">Serial Number</label>
                             <input asp-for="SerialNo" class="form-control font-monospace" required />
                         </div>
                         <div class="col-md-4">
-                            <label asp-for="Type" class="form-label fw-semibold">Equipment Type</label>
-                            <input asp-for="Type" class="form-control" required />
+                            <label class="form-label fw-semibold">Equipment Type</label>
+                            <input type="text" class="form-control bg-light" value="@Model.Type" readonly />
                         </div>
 
                         <div class="col-md-4">
@@ -44,14 +116,10 @@
                                 <option value="">-- None --</option>
                             </select>
                         </div>
-                        <div class="col-md-4">
-                            <label asp-for="MaintenanceTeam" class="form-label fw-semibold">Designated Maintenance Team</label>
-                            <select asp-for="MaintenanceTeam" class="form-select" asp-items="ViewBag.MaintenanceTeams" required></select>
-                            <div class="form-text small">Routing target for support tickets.</div>
-                        </div>
                     </div>
 
-                    <h6 class="fw-bold text-muted text-uppercase mb-3 pb-2 border-bottom">2. Status & Location</h6>
+                    <!-- 3. Status & Location -->
+                    <h6 class="fw-bold text-muted text-uppercase mb-3 pb-2 border-bottom">3. Status & Location</h6>
                     <div class="row g-3 mb-4">
                         <div class="col-md-4">
                             <label asp-for="Status" class="form-label fw-semibold">Operational Status</label>
@@ -65,7 +133,7 @@
                         <div class="col-md-4">
                             <label asp-for="UserId" class="form-label fw-semibold">Assigned Custodian</label>
                             <select asp-for="UserId" class="form-select" asp-items="ViewBag.Users">
-                                <option value="">-- Central IT Stock --</option>
+                                <option value="">-- Central Department Stock --</option>
                             </select>
                         </div>
                         <div class="col-md-4">
@@ -76,7 +144,8 @@
                         </div>
                     </div>
 
-                    <h6 class="fw-bold text-muted text-uppercase mb-3 pb-2 border-bottom">3. Financial & Technical Details</h6>
+                    <!-- 4. Commercial & Periodic Maintenance -->
+                    <h6 class="fw-bold text-muted text-uppercase mb-3 pb-2 border-bottom">4. Financial & Periodic Inspection</h6>
                     <div class="row g-3 mb-4">
                         <div class="col-md-4">
                             <label asp-for="Price" class="form-label fw-semibold">Purchase Price ($)</label>
@@ -90,36 +159,44 @@
                             <label asp-for="WarrantyTill" class="form-label fw-semibold">Warranty Expiration Date</label>
                             <input asp-for="WarrantyTill" class="form-control" type="date" />
                         </div>
-                        <div class="col-12">
-                            <label asp-for="Specs" class="form-label fw-semibold">Technical Specifications</label>
-                            <textarea asp-for="Specs" class="form-control font-monospace" rows="3"></textarea>
-                        </div>
-                    </div>
 
-                    <h6 class="fw-bold text-muted text-uppercase mb-3 pb-2 border-bottom">4. Preventive Maintenance</h6>
-                    <div class="row g-3 mb-4">
-                        <div class="col-md-4">
-                            <div class="form-check form-switch mt-4">
-                                <input asp-for="NeedsPeriodic" class="form-check-input" type="checkbox" id="needsPeriodicCheck" />
-                                <label class="form-check-label fw-semibold" for="needsPeriodicCheck">Requires Recurring Maintenance</label>
+                        <div class="col-md-6">
+                            <div class="form-check mt-3">
+                                <input type="checkbox" name="NeedsPeriodic" value="true" class="form-check-input" id="chkNeedsPeriodic" @(Model.NeedsPeriodic == true ? "checked" : "") />
+                                <label class="form-check-label fw-semibold" for="chkNeedsPeriodic">
+                                    Requires Scheduled Periodic Maintenance
+                                </label>
                             </div>
                         </div>
-                        <div class="col-md-4">
-                            <label asp-for="PeriodicInterval" class="form-label fw-semibold">Interval (in Days)</label>
+                        <div class="col-md-6" id="periodicIntervalContainer" style="display: @(Model.NeedsPeriodic == true ? "block" : "none");">
+                            <label asp-for="PeriodicInterval" class="form-label fw-semibold">Inspection Interval (Days)</label>
                             <input asp-for="PeriodicInterval" class="form-control" type="number" />
-                        </div>
-                        <div class="col-md-4">
-                            <label asp-for="LastPeriodic" class="form-label fw-semibold">Last Checked Date</label>
-                            <input asp-for="LastPeriodic" class="form-control" type="date" />
                         </div>
                     </div>
 
                     <div class="d-flex justify-content-end gap-2 border-top pt-3">
                         <a href="@Url.Action("Details", new { id = Model.Id })" class="btn btn-outline-secondary">Cancel</a>
-                        <button type="submit" class="btn btn-primary px-4">Save Changes</button>
+                        <button type="submit" class="btn btn-primary px-4 fw-bold">
+                            <i class="fa-solid fa-floppy-disk me-1"></i> Save Changes
+                        </button>
                     </div>
                 </form>
             </div>
         </div>
     </div>
 </div>
+
+@section Scripts {
+<script>
+    document.addEventListener("DOMContentLoaded", function () {
+        const chkPeriodic = document.getElementById("chkNeedsPeriodic");
+        const intervalBox = document.getElementById("periodicIntervalContainer");
+
+        if (chkPeriodic && intervalBox) {
+            chkPeriodic.addEventListener("change", function () {
+                intervalBox.style.display = chkPeriodic.checked ? "block" : "none";
+            });
+        }
+    });
+</script>
+}

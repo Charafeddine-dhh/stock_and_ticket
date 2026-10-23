@@ -1,7 +1,10 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Text.Json;
 using System.Threading.Tasks;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.EntityFrameworkCore;
@@ -145,26 +148,91 @@ namespace StockPortal.Controllers
         }
 
         // GET: Assets/Create
-        public async Task<IActionResult> Create()
+        public async Task<IActionResult> Create(int? deviceFormId = null)
         {
             if (!_currentUserService.CanManageAssets()) return Forbid();
 
+            var formsQuery = _context.DeviceForms.AsQueryable();
+            if (_currentUserService.IsMaintenance())
+            {
+                var myTeam = _currentUserService.GetMaintenanceTeam();
+                formsQuery = formsQuery.Where(f => f.Department == myTeam);
+            }
+
+            var availableForms = await formsQuery.OrderBy(f => f.Name).ToListAsync();
+            ViewBag.AvailableDeviceForms = availableForms;
+
+            DeviceForm? selectedForm = null;
+            if (deviceFormId.HasValue && deviceFormId.Value > 0)
+            {
+                selectedForm = availableForms.FirstOrDefault(f => f.Id == deviceFormId.Value);
+            }
+            if (selectedForm == null && availableForms.Any())
+            {
+                selectedForm = availableForms.First();
+            }
+
+            ViewBag.SelectedDeviceForm = selectedForm;
             await PopulateDropdowns();
+
+            var defaultTeam = selectedForm?.Department ?? (_currentUserService.GetMaintenanceTeam() ?? MaintenanceTeams.IT);
+
             return View(new Asset
             {
                 Status = "In Service",
                 BuyingDate = DateTime.Now,
                 NeedsPeriodic = false,
-                MaintenanceTeam = MaintenanceTeams.IT
+                Type = selectedForm?.Name,
+                MaintenanceTeam = defaultTeam
             });
         }
 
         // POST: Assets/Create
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Create(Asset asset)
+        public async Task<IActionResult> Create(Asset asset, int deviceFormId, IFormCollection formCollection)
         {
             if (!_currentUserService.CanManageAssets()) return Forbid();
+
+            var selectedForm = await _context.DeviceForms.FindAsync(deviceFormId);
+            if (selectedForm == null)
+            {
+                ModelState.AddModelError("deviceFormId", "Please select a valid device specification template.");
+            }
+            else
+            {
+                // RBAC check: User can only create equipment in their department
+                if (!_currentUserService.CanCreateAssetInDepartment(selectedForm.Department))
+                {
+                    return Forbid();
+                }
+
+                asset.Type = selectedForm.Name;
+                asset.MaintenanceTeam = selectedForm.Department;
+
+                // Extract dynamic specification fields
+                var specsDict = new Dictionary<string, string>();
+                foreach (var field in selectedForm.Fields)
+                {
+                    var formVal = formCollection[$"spec_{field.Name}"].ToString();
+                    if (string.IsNullOrWhiteSpace(formVal))
+                    {
+                        formVal = formCollection[$"specs[{field.Name}]"].ToString();
+                    }
+
+                    if (field.Required && string.IsNullOrWhiteSpace(formVal))
+                    {
+                        ModelState.AddModelError($"spec_{field.Name}", $"{field.Label} is required.");
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(formVal))
+                    {
+                        specsDict[field.Name] = formVal.Trim();
+                    }
+                }
+
+                asset.Specs = JsonSerializer.Serialize(specsDict, new JsonSerializerOptions { WriteIndented = false });
+            }
 
             // Validate unique HospitalNo
             if (!string.IsNullOrWhiteSpace(asset.HospitalNo) && 
@@ -173,7 +241,7 @@ namespace StockPortal.Controllers
                 ModelState.AddModelError("HospitalNo", "An asset with this Hospital Tag Number already exists.");
             }
 
-            if (ModelState.IsValid)
+            if (ModelState.IsValid && selectedForm != null)
             {
                 // Calculate next periodic if needed
                 if (asset.NeedsPeriodic == true && asset.PeriodicInterval.HasValue && asset.PeriodicInterval.Value > 0)
@@ -200,9 +268,18 @@ namespace StockPortal.Controllers
                     await _context.SaveChangesAsync();
                 }
 
-                TempData["SuccessMessage"] = $"Asset {asset.HospitalNo ?? ("#" + asset.Id)} was registered successfully!";
+                TempData["SuccessMessage"] = $"Asset {asset.HospitalNo ?? ("#" + asset.Id)} was registered successfully under {asset.Type} ({asset.MaintenanceTeam})!";
                 return RedirectToAction(nameof(Details), new { id = asset.Id });
             }
+
+            var formsQuery = _context.DeviceForms.AsQueryable();
+            if (_currentUserService.IsMaintenance())
+            {
+                var myTeam = _currentUserService.GetMaintenanceTeam();
+                formsQuery = formsQuery.Where(f => f.Department == myTeam);
+            }
+            ViewBag.AvailableDeviceForms = await formsQuery.OrderBy(f => f.Name).ToListAsync();
+            ViewBag.SelectedDeviceForm = selectedForm;
 
             await PopulateDropdowns(asset);
             return View(asset);
@@ -211,11 +288,34 @@ namespace StockPortal.Controllers
         // GET: Assets/Edit/5
         public async Task<IActionResult> Edit(int? id)
         {
-            if (!_currentUserService.CanManageAssets()) return Forbid();
             if (id == null) return NotFound();
-
             var asset = await _context.Assets.FindAsync(id);
             if (asset == null) return NotFound();
+
+            // RBAC Guard: URL tampering prevention
+            if (!_currentUserService.CanAccessAsset(asset) || !_currentUserService.CanManageAsset(asset))
+            {
+                return Forbid();
+            }
+
+            // Find matching device form
+            var matchingForm = await _context.DeviceForms.FirstOrDefaultAsync(f => 
+                f.Name.ToLower() == (asset.Type ?? "").ToLower() && f.Department == asset.MaintenanceTeam)
+                ?? await _context.DeviceForms.FirstOrDefaultAsync(f => f.Department == asset.MaintenanceTeam);
+
+            ViewBag.DeviceForm = matchingForm;
+
+            // Parse specs dictionary
+            var specsDict = new Dictionary<string, string>();
+            if (!string.IsNullOrWhiteSpace(asset.Specs))
+            {
+                try
+                {
+                    specsDict = JsonSerializer.Deserialize<Dictionary<string, string>>(asset.Specs, new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
+                }
+                catch { }
+            }
+            ViewBag.SpecsDictionary = specsDict;
 
             await PopulateDropdowns(asset);
             return View(asset);
@@ -224,10 +324,54 @@ namespace StockPortal.Controllers
         // POST: Assets/Edit/5
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Edit(int id, Asset asset)
+        public async Task<IActionResult> Edit(int id, Asset asset, int? deviceFormId, IFormCollection formCollection)
         {
-            if (!_currentUserService.CanManageAssets()) return Forbid();
             if (id != asset.Id) return NotFound();
+
+            var existing = await _context.Assets.AsNoTracking().FirstOrDefaultAsync(a => a.Id == id);
+            if (existing == null) return NotFound();
+
+            // RBAC Guard: URL tampering prevention
+            if (!_currentUserService.CanAccessAsset(existing) || !_currentUserService.CanManageAsset(existing))
+            {
+                return Forbid();
+            }
+
+            // Preserve maintenance team if not Admin
+            if (_currentUserService.IsMaintenance())
+            {
+                asset.MaintenanceTeam = existing.MaintenanceTeam;
+            }
+
+            // Process dynamic specification fields
+            DeviceForm? selectedForm = null;
+            if (deviceFormId.HasValue && deviceFormId.Value > 0)
+            {
+                selectedForm = await _context.DeviceForms.FindAsync(deviceFormId.Value);
+            }
+            if (selectedForm == null)
+            {
+                selectedForm = await _context.DeviceForms.FirstOrDefaultAsync(f => 
+                    f.Name.ToLower() == (asset.Type ?? "").ToLower() && f.Department == asset.MaintenanceTeam);
+            }
+
+            if (selectedForm != null)
+            {
+                var specsDict = new Dictionary<string, string>();
+                foreach (var field in selectedForm.Fields)
+                {
+                    var formVal = formCollection[$"spec_{field.Name}"].ToString();
+                    if (string.IsNullOrWhiteSpace(formVal))
+                    {
+                        formVal = formCollection[$"specs[{field.Name}]"].ToString();
+                    }
+                    if (!string.IsNullOrWhiteSpace(formVal))
+                    {
+                        specsDict[field.Name] = formVal.Trim();
+                    }
+                }
+                asset.Specs = JsonSerializer.Serialize(specsDict, new JsonSerializerOptions { WriteIndented = false });
+            }
 
             // Validate unique HospitalNo if changed
             if (!string.IsNullOrWhiteSpace(asset.HospitalNo) && 
@@ -254,7 +398,7 @@ namespace StockPortal.Controllers
 
                     _context.Update(asset);
                     await _context.SaveChangesAsync();
-                    TempData["SuccessMessage"] = "Asset updated successfully!";
+                    TempData["SuccessMessage"] = "Asset specifications & details updated successfully!";
                 }
                 catch (DbUpdateConcurrencyException)
                 {
@@ -264,6 +408,7 @@ namespace StockPortal.Controllers
                 return RedirectToAction(nameof(Details), new { id = asset.Id });
             }
 
+            ViewBag.DeviceForm = selectedForm;
             await PopulateDropdowns(asset);
             return View(asset);
         }
@@ -273,10 +418,10 @@ namespace StockPortal.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> TransferCustody(int assetId, int newUserId, int newRoomId, int newCustodyTypeId, string? notes)
         {
-            if (!_currentUserService.CanManageAssets()) return Forbid();
-
             var asset = await _context.Assets.FindAsync(assetId);
             if (asset == null) return NotFound();
+
+            if (!_currentUserService.CanManageAsset(asset)) return Forbid();
 
             // Close existing history record if open
             var previousHistory = await _context.AssetHistories
@@ -317,10 +462,10 @@ namespace StockPortal.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Retire(int id, string? reason)
         {
-            if (!_currentUserService.CanManageAssets()) return Forbid();
-
             var asset = await _context.Assets.FindAsync(id);
             if (asset == null) return NotFound();
+
+            if (!_currentUserService.CanManageAsset(asset)) return Forbid();
 
             asset.Status = "Retired";
             _context.Update(asset);
@@ -345,7 +490,7 @@ namespace StockPortal.Controllers
         // GET: Assets/Delete/5
         public async Task<IActionResult> Delete(int? id)
         {
-            if (!_currentUserService.CanManageAssets()) return Forbid();
+            if (!_currentUserService.IsAdmin()) return Forbid();
             if (id == null) return NotFound();
 
             var asset = await _context.Assets
@@ -365,7 +510,7 @@ namespace StockPortal.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> DeleteConfirmed(int id)
         {
-            if (!_currentUserService.CanManageAssets()) return Forbid();
+            if (!_currentUserService.IsAdmin()) return Forbid();
 
             var asset = await _context.Assets
                 .Include(a => a.Tickets)

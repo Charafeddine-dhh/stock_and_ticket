@@ -1,0 +1,222 @@
+@model StockPortal.Models.DeviceForm
+@inject StockPortal.Services.ICurrentUserService CurrentUser
+@{
+    ViewData["Title"] = "Create Universal Device Form";
+    var availableTeams = ViewBag.AvailableTeams as string[] ?? StockPortal.Models.MaintenanceTeams.All;
+    bool isMaintenance = CurrentUser.IsMaintenance();
+}
+
+<div class="row justify-content-center">
+    <div class="col-lg-10">
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-white py-3">
+                <h5 class="mb-0 fw-bold"><i class="fa-solid fa-shapes text-primary me-2"></i> Build Universal Device Specification Form</h5>
+            </div>
+            <div class="card-body p-4">
+                <form asp-action="Create" method="post" id="deviceFormEditor">
+                    @Html.AntiForgeryToken()
+                    <div asp-validation-summary="ModelOnly" class="text-danger mb-3"></div>
+
+                    <input type="hidden" asp-for="Form" id="hiddenFormJson" />
+
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-6">
+                            <label asp-for="Name" class="form-label fw-semibold">Device Type / Template Name <span class="text-danger">*</span></label>
+                            <input asp-for="Name" class="form-control" placeholder="e.g. Laptop, Patient Monitor, HVAC Chiller, Core Switch..." required />
+                            <span asp-validation-for="Name" class="text-danger small"></span>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label asp-for="Department" class="form-label fw-semibold">Maintenance Department <span class="text-danger">*</span></label>
+                            @if (isMaintenance)
+                            {
+                                <input type="text" class="form-control bg-light fw-bold" value="@CurrentUser.GetMaintenanceTeam()" readonly />
+                                <input type="hidden" asp-for="Department" value="@CurrentUser.GetMaintenanceTeam()" />
+                                <div class="form-text small text-success"><i class="fa-solid fa-lock me-1"></i> Locked to your maintenance engineering discipline.</div>
+                            }
+                            else
+                            {
+                                <select asp-for="Department" class="form-select">
+                                    @foreach (var t in availableTeams)
+                                    {
+                                        <option value="@t">@t Maintenance</option>
+                                    }
+                                </select>
+                            }
+                        </div>
+                    </div>
+
+                    <!-- Visual Field Builder -->
+                    <div class="card bg-light border mb-4">
+                        <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="fw-bold mb-0 text-dark"><i class="fa-solid fa-list-check text-primary me-2"></i> Dynamic Specification Fields</h6>
+                                <small class="text-muted">Define the custom fields that will appear when adding equipment of this type</small>
+                            </div>
+                            <button type="button" class="btn btn-sm btn-primary" id="btnAddField">
+                                <i class="fa-solid fa-plus me-1"></i> Add Field
+                            </button>
+                        </div>
+                        <div class="card-body p-0">
+                            <div class="table-responsive">
+                                <table class="table table-bordered align-middle mb-0" id="fieldsTable">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th style="width: 25%;">Field Display Label <span class="text-danger">*</span></th>
+                                            <th style="width: 20%;">Variable Key <span class="text-danger">*</span></th>
+                                            <th style="width: 15%;">Field Type</th>
+                                            <th style="width: 25%;">Dropdown Options (Comma-separated)</th>
+                                            <th style="width: 10%;" class="text-center">Required?</th>
+                                            <th style="width: 5%;" class="text-center">Remove</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="fieldsContainer">
+                                        <!-- Dynamically added rows -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-end gap-2 border-top pt-3">
+                        <a href="@Url.Action("Index")" class="btn btn-outline-secondary">Cancel</a>
+                        <button type="submit" class="btn btn-primary px-4 fw-bold">
+                            <i class="fa-solid fa-floppy-disk me-1"></i> Save Device Form
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+    document.addEventListener("DOMContentLoaded", function () {
+        const fieldsContainer = document.getElementById("fieldsContainer");
+        const btnAddField = document.getElementById("btnAddField");
+        const formEl = document.getElementById("deviceFormEditor");
+        const hiddenFormJson = document.getElementById("hiddenFormJson");
+
+        let initialFields = [];
+        try {
+            initialFields = JSON.parse(hiddenFormJson.value || "[]");
+        } catch(e) {
+            initialFields = [];
+        }
+
+        if (initialFields.length === 0) {
+            // Default sample rows
+            initialFields = [
+                { name: "Model", label: "Model / Series", type: "text", options: [], required: true, placeholder: "" },
+                { name: "Spec1", label: "Primary Specification", type: "text", options: [], required: false, placeholder: "" }
+            ];
+        }
+
+        function createRow(field, index) {
+            const tr = document.createElement("tr");
+            tr.innerHTML = `
+                <td>
+                    <input type="text" class="form-control form-control-sm field-label" value="${field.label || ''}" placeholder="e.g. Processor / CPU" required />
+                </td>
+                <td>
+                    <input type="text" class="form-control form-control-sm font-monospace field-name" value="${field.name || ''}" placeholder="e.g. CPU" required />
+                </td>
+                <td>
+                    <select class="form-select form-select-sm field-type">
+                        <option value="text" ${field.type === 'text' ? 'selected' : ''}>Text Input</option>
+                        <option value="select" ${field.type === 'select' ? 'selected' : ''}>Dropdown Select</option>
+                        <option value="number" ${field.type === 'number' ? 'selected' : ''}>Numeric</option>
+                        <option value="textarea" ${field.type === 'textarea' ? 'selected' : ''}>Multi-line Text</option>
+                    </select>
+                </td>
+                <td>
+                    <input type="text" class="form-control form-control-sm field-options" value="${(field.options || []).join(', ')}" placeholder="e.g. Option 1, Option 2" ${field.type === 'select' ? '' : 'disabled'} />
+                </td>
+                <td class="text-center">
+                    <input type="checkbox" class="form-check-input field-required" ${field.required ? 'checked' : ''} />
+                </td>
+                <td class="text-center">
+                    <button type="button" class="btn btn-sm btn-outline-danger btn-remove"><i class="fa-solid fa-trash-can"></i></button>
+                </td>
+            `;
+
+            // Auto-slug variable name from label if empty
+            const labelInput = tr.querySelector(".field-label");
+            const nameInput = tr.querySelector(".field-name");
+            labelInput.addEventListener("input", function() {
+                if (!nameInput.dataset.touched) {
+                    nameInput.value = labelInput.value.replace(/[^a-zA-Z0-9]/g, '');
+                }
+            });
+            nameInput.addEventListener("input", function() {
+                nameInput.dataset.touched = "true";
+            });
+
+            // Toggle options input enable/disable based on select
+            const typeSelect = tr.querySelector(".field-type");
+            const optionsInput = tr.querySelector(".field-options");
+            typeSelect.addEventListener("change", function() {
+                if (typeSelect.value === "select") {
+                    optionsInput.disabled = false;
+                    optionsInput.placeholder = "e.g. Option A, Option B, Option C";
+                } else {
+                    optionsInput.disabled = true;
+                    optionsInput.placeholder = "N/A for text/number";
+                }
+            });
+
+            tr.querySelector(".btn-remove").addEventListener("click", function() {
+                tr.remove();
+            });
+
+            fieldsContainer.appendChild(tr);
+        }
+
+        initialFields.forEach((f, idx) => createRow(f, idx));
+
+        btnAddField.addEventListener("click", function () {
+            createRow({ name: "", label: "", type: "text", options: [], required: false }, fieldsContainer.children.length);
+        });
+
+        formEl.addEventListener("submit", function (e) {
+            const rows = fieldsContainer.querySelectorAll("tr");
+            const fields = [];
+
+            rows.forEach(tr => {
+                const label = tr.querySelector(".field-label").value.trim();
+                let name = tr.querySelector(".field-name").value.trim();
+                const type = tr.querySelector(".field-type").value;
+                const optionsRaw = tr.querySelector(".field-options").value;
+                const required = tr.querySelector(".field-required").checked;
+
+                if (!name && label) {
+                    name = label.replace(/[^a-zA-Z0-9]/g, '');
+                }
+
+                if (label && name) {
+                    const options = (type === "select" && optionsRaw)
+                        ? optionsRaw.split(",").map(s => s.trim()).filter(s => s.length > 0)
+                        : [];
+
+                    fields.push({
+                        name: name,
+                        label: label,
+                        type: type,
+                        options: options,
+                        required: required
+                    });
+                }
+            });
+
+            if (fields.length === 0) {
+                alert("Please define at least one specification field for this device.");
+                e.preventDefault();
+                return false;
+            }
+
+            hiddenFormJson.value = JSON.stringify(fields);
+        });
+    });
+</script>
+}

@@ -8,39 +8,55 @@ using Microsoft.EntityFrameworkCore;
 using StockPortal.Data;
 using StockPortal.Models;
 using StockPortal.ViewModels;
+using StockPortal.Services;
 
 namespace StockPortal.Controllers
 {
     public class MaintenanceController : Controller
     {
         private readonly StockDbContext _context;
+        private readonly ICurrentUserService _currentUserService;
 
-        public MaintenanceController(StockDbContext context)
+        public MaintenanceController(StockDbContext context, ICurrentUserService currentUserService)
         {
             _context = context;
+            _currentUserService = currentUserService;
         }
 
         // GET: Maintenance
         public async Task<IActionResult> Index()
         {
+            if (_currentUserService.IsEndUser())
+            {
+                return Forbid();
+            }
+
             var now = DateTime.Now.Date;
             var thirtyDaysFromNow = now.AddDays(30);
 
-            var periodicAssets = await _context.Assets
+            var periodicAssetsQuery = _context.Assets
                 .Where(a => a.NeedsPeriodic == true)
                 .Include(a => a.User)
                 .Include(a => a.Room)
                 .Include(a => a.Supplier)
-                .ToListAsync();
+                .AsQueryable();
 
-            var recentLogs = await _context.AssetMaintenances
+            var logsQuery = _context.AssetMaintenances
                 .Include(m => m.Asset)
                 .Include(m => m.Technician)
                 .Include(m => m.Supplier)
                 .Include(m => m.Ticket)
-                .OrderByDescending(m => m.TimStamp)
-                .Take(50)
-                .ToListAsync();
+                .AsQueryable();
+
+            if (_currentUserService.IsMaintenance())
+            {
+                var myTeam = _currentUserService.GetMaintenanceTeam();
+                periodicAssetsQuery = periodicAssetsQuery.Where(a => a.MaintenanceTeam == myTeam);
+                logsQuery = logsQuery.Where(m => m.Asset != null && m.Asset.MaintenanceTeam == myTeam);
+            }
+
+            var periodicAssets = await periodicAssetsQuery.ToListAsync();
+            var recentLogs = await logsQuery.OrderByDescending(m => m.TimStamp).Take(50).ToListAsync();
 
             var vm = new MaintenanceScheduleViewModel
             {
@@ -68,6 +84,17 @@ namespace StockPortal.Controllers
         // GET: Maintenance/Log
         public async Task<IActionResult> Log(int? assetId)
         {
+            if (_currentUserService.IsEndUser()) return Forbid();
+
+            if (assetId.HasValue && assetId.Value > 0)
+            {
+                var targetAsset = await _context.Assets.FindAsync(assetId.Value);
+                if (targetAsset != null && !_currentUserService.CanAccessAsset(targetAsset))
+                {
+                    return Forbid();
+                }
+            }
+
             await PopulateDropdowns(assetId);
 
             var model = new AssetMaintenance
@@ -85,6 +112,17 @@ namespace StockPortal.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Log(AssetMaintenance maintenance)
         {
+            if (_currentUserService.IsEndUser()) return Forbid();
+
+            if (maintenance.AssetId.HasValue)
+            {
+                var targetAsset = await _context.Assets.FindAsync(maintenance.AssetId.Value);
+                if (targetAsset != null && !_currentUserService.CanManageAsset(targetAsset))
+                {
+                    return Forbid();
+                }
+            }
+
             if (ModelState.IsValid)
             {
                 maintenance.TimStamp = DateTime.Now;
@@ -121,6 +159,8 @@ namespace StockPortal.Controllers
         {
             var asset = await _context.Assets.FindAsync(assetId);
             if (asset == null) return NotFound();
+
+            if (!_currentUserService.CanManageAsset(asset)) return Forbid();
 
             var record = new AssetMaintenance
             {
@@ -176,7 +216,14 @@ namespace StockPortal.Controllers
 
         private async Task PopulateDropdowns(int? selectedAssetId = null)
         {
-            var assets = await _context.Assets
+            var assetsQuery = _context.Assets.AsQueryable();
+            if (_currentUserService.IsMaintenance())
+            {
+                var myTeam = _currentUserService.GetMaintenanceTeam();
+                assetsQuery = assetsQuery.Where(a => a.MaintenanceTeam == myTeam);
+            }
+
+            var assets = await assetsQuery
                 .OrderBy(a => a.HospitalNo)
                 .Select(a => new { a.Id, Display = $"{a.HospitalNo} - {a.Brand} ({a.Type})" })
                 .ToListAsync();

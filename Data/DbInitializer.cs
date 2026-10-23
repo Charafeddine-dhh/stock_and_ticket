@@ -381,6 +381,191 @@ namespace StockPortal.Data
 
                 context.SaveChanges();
             }
+
+            // Ensure Universal Device Forms exist
+            if (!context.DeviceForms.Any())
+            {
+                var templates = new[]
+                {
+                    // --- IT MAINTENANCE TEMPLATES ---
+                    new DeviceForm
+                    {
+                        Name = "Laptop",
+                        Department = MaintenanceTeams.IT,
+                        Form = @"[
+                            {""name"":""Processor"",""label"":""Processor / CPU"",""type"":""text"",""required"":true,""placeholder"":""e.g. Intel Core i7-1165G7""},
+                            {""name"":""RAM"",""label"":""Installed Memory (RAM)"",""type"":""select"",""options"":[""8 GB"",""16 GB"",""32 GB"",""64 GB""],""required"":true},
+                            {""name"":""Storage"",""label"":""Primary Storage (SSD)"",""type"":""text"",""required"":true,""placeholder"":""e.g. 512GB NVMe SSD""},
+                            {""name"":""OS"",""label"":""Operating System"",""type"":""select"",""options"":[""Windows 11 Pro"",""Windows 10 Pro"",""Ubuntu Linux"",""macOS""],""required"":true},
+                            {""name"":""ScreenSize"",""label"":""Display Size"",""type"":""text"",""required"":false,""placeholder"":""e.g. 15.6 inch FHD""}
+                        ]"
+                    },
+                    new DeviceForm
+                    {
+                        Name = "Desktop Workstation",
+                        Department = MaintenanceTeams.IT,
+                        Form = @"[
+                            {""name"":""FormFactor"",""label"":""Chassis / Form Factor"",""type"":""select"",""options"":[""Small Form Factor (SFF)"",""Mini Tower"",""All-in-One (AIO)"",""Micro / Tiny PC""],""required"":true},
+                            {""name"":""CPU"",""label"":""Processor (CPU)"",""type"":""text"",""required"":true,""placeholder"":""e.g. Intel Core i5-12500 / Ryzen 5 5600G""},
+                            {""name"":""RAM"",""label"":""Installed RAM"",""type"":""select"",""options"":[""8 GB"",""16 GB"",""32 GB"",""64 GB""],""required"":true},
+                            {""name"":""Storage"",""label"":""Primary Drive"",""type"":""text"",""required"":true,""placeholder"":""e.g. 256GB SSD + 1TB HDD""},
+                            {""name"":""GPU"",""label"":""Graphics Card"",""type"":""text"",""required"":false,""placeholder"":""e.g. Integrated Intel UHD / NVIDIA T600""},
+                            {""name"":""OS"",""label"":""Operating System"",""type"":""select"",""options"":[""Windows 11 Pro"",""Windows 10 Pro""],""required"":true}
+                        ]"
+                    },
+                    new DeviceForm
+                    {
+                        Name = "Core Switch",
+                        Department = MaintenanceTeams.IT,
+                        Form = @"[
+                            {""name"":""Ports"",""label"":""Ethernet Port Count"",""type"":""select"",""options"":[""24-Port Gigabit"",""48-Port Gigabit"",""24-Port Multi-Gig"",""48-Port Multi-Gig""],""required"":true},
+                            {""name"":""PoE"",""label"":""Power Over Ethernet"",""type"":""select"",""options"":[""PoE+ (30W/port)"",""PoE++ (60W/port)"",""Non-PoE""],""required"":true},
+                            {""name"":""Uplinks"",""label"":""Uplink SFP Ports"",""type"":""text"",""required"":true,""placeholder"":""e.g. 4x 10G SFP+""},
+                            {""name"":""ManagementIP"",""label"":""Default Management IP"",""type"":""text"",""required"":false,""placeholder"":""e.g. 10.10.1.5/24""}
+                        ]"
+                    },
+                    new DeviceForm
+                    {
+                        Name = "Network Printer",
+                        Department = MaintenanceTeams.IT,
+                        Form = @"[
+                            {""name"":""Tech"",""label"":""Print Technology"",""type"":""select"",""options"":[""Laser Monochrome"",""Laser Color"",""Thermal Barcode / Wristband"",""Multi-Function Copier (MFP)""],""required"":true},
+                            {""name"":""Resolution"",""label"":""Max Resolution"",""type"":""text"",""required"":false,""placeholder"":""e.g. 1200 x 1200 dpi""},
+                            {""name"":""Duplex"",""label"":""Automatic Duplex (2-sided)"",""type"":""select"",""options"":[""Yes"",""No""],""required"":true},
+                            {""name"":""TrayCapacity"",""label"":""Paper Tray Capacity"",""type"":""text"",""required"":false,""placeholder"":""e.g. 2x 500-sheet trays""}
+                        ]"
+                    },
+                    new DeviceForm
+                    {
+                        Name = "Rack Server",
+                        Department = MaintenanceTeams.IT,
+                        Form = @"[
+                            {""name"":""Chassis"",""label"":""Rack Units (U)"",""type"":""select"",""options"":[""1U Rack"",""2U Rack"",""4U Rack"",""Blade Enclosure""],""required"":true},
+                            {""name"":""CPU"",""label"":""Processors Installed"",""type"":""text"",""required"":true,""placeholder"":""e.g. 2x Intel Xeon Silver 4314""},
+                            {""name"":""RAM"",""label"":""Installed ECC Memory"",""type"":""select"",""options"":[""64 GB DDR4"",""128 GB DDR4"",""256 GB DDR4"",""512 GB DDR4""],""required"":true},
+                            {""name"":""RAID"",""label"":""Storage / RAID Setup"",""type"":""text"",""required"":true,""placeholder"":""e.g. 6x 1.92TB SAS SSD RAID 6""},
+                            {""name"":""PSU"",""label"":""Power Supply Units"",""type"":""text"",""required"":false,""placeholder"":""e.g. Dual Redundant 800W Platinum""}
+                        ]"
+                    },
+
+                    // --- BIOMEDICAL ENGINEERING TEMPLATES ---
+                    new DeviceForm
+                    {
+                        Name = "Patient Monitor",
+                        Department = MaintenanceTeams.Biomedical,
+                        Form = @"[
+                            {""name"":""Screen"",""label"":""Display Screen"",""type"":""text"",""required"":true,""placeholder"":""e.g. 19-inch High Resolution Medical Touchscreen""},
+                            {""name"":""Parameters"",""label"":""Monitored Parameters"",""type"":""text"",""required"":true,""placeholder"":""e.g. ECG, SpO2, NIBP, Invasive Pressure, Temp, EtCO2""},
+                            {""name"":""LeadCount"",""label"":""ECG Lead Option"",""type"":""select"",""options"":[""3-Lead"",""5-Lead"",""12-Lead Diagnostic""],""required"":true},
+                            {""name"":""Battery"",""label"":""Battery Autonomy"",""type"":""text"",""required"":false,""placeholder"":""e.g. 4 Hours Lithium-ion""},
+                            {""name"":""Telemetry"",""label"":""Central Telemetry Link"",""type"":""select"",""options"":[""Wired Ethernet"",""Wireless 5GHz Wi-Fi"",""Dual Link""],""required"":true}
+                        ]"
+                    },
+                    new DeviceForm
+                    {
+                        Name = "ICU Ventilator",
+                        Department = MaintenanceTeams.Biomedical,
+                        Form = @"[
+                            {""name"":""VentModes"",""label"":""Ventilation Modes"",""type"":""text"",""required"":true,""placeholder"":""e.g. VC-CMV, PC-BIPAP, PSV, APRV, CPAP/NIV""},
+                            {""name"":""PatientRange"",""label"":""Patient Demographic"",""type"":""select"",""options"":[""Adult & Pediatric"",""Neonatal Specialized"",""Universal (Neonatal to Adult)""],""required"":true},
+                            {""name"":""GasSupply"",""label"":""Gas Supply Requirements"",""type"":""text"",""required"":true,""placeholder"":""e.g. Pipeline O2 & Medical Air (2.8 - 6 bar)""},
+                            {""name"":""InternalBattery"",""label"":""Battery Backup Time"",""type"":""text"",""required"":false,""placeholder"":""e.g. 180 Minutes Internal Li-Ion""}
+                        ]"
+                    },
+                    new DeviceForm
+                    {
+                        Name = "Defibrillator",
+                        Department = MaintenanceTeams.Biomedical,
+                        Form = @"[
+                            {""name"":""Waveform"",""label"":""Defibrillation Waveform"",""type"":""select"",""options"":[""Biphasic Truncated Exponential"",""Rectilinear Biphasic""],""required"":true},
+                            {""name"":""Pacing"",""label"":""External Transcutaneous Pacing"",""type"":""select"",""options"":[""Yes - Demand and Fixed"",""No""],""required"":true},
+                            {""name"":""CPRFeedback"",""label"":""Real-time CPR Sensor Feedback"",""type"":""select"",""options"":[""Equipped"",""Not Equipped""],""required"":true},
+                            {""name"":""BatteryType"",""label"":""Rechargeable Battery Chemistry"",""type"":""text"",""required"":false,""placeholder"":""e.g. Smart Rechargeable Lithium-ion""}
+                        ]"
+                    },
+                    new DeviceForm
+                    {
+                        Name = "Ultrasound Scanner",
+                        Department = MaintenanceTeams.Biomedical,
+                        Form = @"[
+                            {""name"":""Probes"",""label"":""Included Transducer Probes"",""type"":""text"",""required"":true,""placeholder"":""e.g. Convex Abdominal, Linear Vascular, Phased Cardiac""},
+                            {""name"":""ProbePorts"",""label"":""Active Transducer Ports"",""type"":""select"",""options"":[""2 Active Ports"",""3 Active Ports"",""4 Active Ports""],""required"":true},
+                            {""name"":""Doppler"",""label"":""Doppler Capabilities"",""type"":""text"",""required"":false,""placeholder"":""e.g. Color Doppler, Pulsed Wave, Continuous Wave, Power Doppler""},
+                            {""name"":""Display"",""label"":""Monitor Specification"",""type"":""text"",""required"":false,""placeholder"":""e.g. 21.5-inch OLED Articulating Arm""}
+                        ]"
+                    },
+                    new DeviceForm
+                    {
+                        Name = "Mobile X-Ray",
+                        Department = MaintenanceTeams.Biomedical,
+                        Form = @"[
+                            {""name"":""GeneratorOutput"",""label"":""Generator Output (kW)"",""type"":""select"",""options"":[""15 kW High Frequency"",""30 kW High Frequency"",""35 kW High Frequency"",""50 kW Ultra High Frequency""],""required"":true},
+                            {""name"":""Detector"",""label"":""Flat Panel Detector (FPD)"",""type"":""text"",""required"":true,""placeholder"":""e.g. 14x17 inch Wireless Cesium Iodide (CsI)""},
+                            {""name"":""DriveSystem"",""label"":""Motorized Travel Assist"",""type"":""select"",""options"":[""Dual Motorized Drive"",""Manual Push""],""required"":true}
+                        ]"
+                    },
+
+                    // --- GENERAL FACILITY MAINTENANCE TEMPLATES ---
+                    new DeviceForm
+                    {
+                        Name = "Facility UPS",
+                        Department = MaintenanceTeams.General,
+                        Form = @"[
+                            {""name"":""Capacity"",""label"":""Apparent / Active Power"",""type"":""select"",""options"":[""10 kVA / 9 kW"",""20 kVA / 18 kW"",""40 kVA / 36 kW"",""80 kVA / 72 kW"",""120 kVA / 108 kW""],""required"":true},
+                            {""name"":""BatteryBank"",""label"":""Battery Bank Specification"",""type"":""text"",""required"":true,""placeholder"":""e.g. 32x 12V 100Ah VRLA Batteries""},
+                            {""name"":""Autonomy"",""label"":""Full Load Autonomy Time"",""type"":""text"",""required"":false,""placeholder"":""e.g. 45 Minutes Critical Hospital Load""},
+                            {""name"":""InputVoltage"",""label"":""Nominal Input / Output"",""type"":""select"",""options"":[""380/400V 3-Phase 4-Wire"",""220/230V Single Phase""],""required"":true}
+                        ]"
+                    },
+                    new DeviceForm
+                    {
+                        Name = "HVAC Chiller",
+                        Department = MaintenanceTeams.General,
+                        Form = @"[
+                            {""name"":""CoolingTons"",""label"":""Cooling Capacity (TR / kW)"",""type"":""select"",""options"":[""25 TR (88 kW)"",""50 TR (175 kW)"",""100 TR (350 kW)"",""200 TR (700 kW)""],""required"":true},
+                            {""name"":""Refrigerant"",""label"":""Refrigerant Gas"",""type"":""select"",""options"":[""R-410A Eco"",""R-134a"",""R-32"",""R-407C""],""required"":true},
+                            {""name"":""CompressorCount"",""label"":""Compressor Circuit Count"",""type"":""select"",""options"":[""Single Scroll"",""Dual Scroll"",""Dual Screw Hermetic""],""required"":true},
+                            {""name"":""PowerFeed"",""label"":""Main Electrical Supply"",""type"":""text"",""required"":false,""placeholder"":""e.g. 380V / 3Ph / 50Hz, 125A Breaker""}
+                        ]"
+                    },
+                    new DeviceForm
+                    {
+                        Name = "Emergency Generator",
+                        Department = MaintenanceTeams.General,
+                        Form = @"[
+                            {""name"":""PrimeRating"",""label"":""Prime Power Rating (kVA)"",""type"":""select"",""options"":[""150 kVA"",""250 kVA"",""500 kVA"",""750 kVA"",""1000 kVA""],""required"":true},
+                            {""name"":""EngineMake"",""label"":""Diesel Engine Brand / Model"",""type"":""text"",""required"":true,""placeholder"":""e.g. Perkins 2506A / Cummins QSK23""},
+                            {""name"":""ATS"",""label"":""Automatic Transfer Switch"",""type"":""text"",""required"":false,""placeholder"":""e.g. ASCO 7000 Series 4-Pole 800A""},
+                            {""name"":""FuelTank"",""label"":""Base Fuel Tank Capacity"",""type"":""text"",""required"":false,""placeholder"":""e.g. 1000 Liters (12 hours runtime)""}
+                        ]"
+                    },
+                    new DeviceForm
+                    {
+                        Name = "Medical Gas Manifold",
+                        Department = MaintenanceTeams.General,
+                        Form = @"[
+                            {""name"":""GasService"",""label"":""Medical Gas Type"",""type"":""select"",""options"":[""Medical Oxygen (O2)"",""Medical Air 4-Bar"",""Surgical Air 7-Bar"",""Nitrous Oxide (N2O)"",""Medical Vacuum""],""required"":true},
+                            {""name"":""BankSize"",""label"":""Cylinder Bank Configuration"",""type"":""text"",""required"":true,""placeholder"":""e.g. 2x 10-Cylinder Dual Bank Auto-Changeover""},
+                            {""name"":""SupplyPressure"",""label"":""Regulated Distribution Pressure"",""type"":""text"",""required"":true,""placeholder"":""e.g. 4.2 bar (60 psig)""},
+                            {""name"":""ReserveSupply"",""label"":""Emergency Reserve Bank"",""type"":""select"",""options"":[""Third Emergency Bank Attached"",""Standalone High-Pressure Pack""],""required"":false}
+                        ]"
+                    },
+                    new DeviceForm
+                    {
+                        Name = "Cleanroom HEPA Filter",
+                        Department = MaintenanceTeams.General,
+                        Form = @"[
+                            {""name"":""Efficiency"",""label"":""Filter Rating / Efficiency"",""type"":""select"",""options"":[""H14 HEPA 99.995%"",""U15 ULPA 99.9995%"",""H13 HEPA 99.95%""],""required"":true},
+                            {""name"":""FlowRate"",""label"":""Rated Airflow Volume"",""type"":""text"",""required"":true,""placeholder"":""e.g. 1200 CFM (2000 m3/h)""},
+                            {""name"":""PressureGauge"",""label"":""Magnehelic Differential Gauge"",""type"":""select"",""options"":[""Installed (0-500 Pa)"",""Digital Sensor to BMS""],""required"":true},
+                            {""name"":""LocationServed"",""label"":""Hospital Critical Area"",""type"":""text"",""required"":false,""placeholder"":""e.g. Operating Theatre 1 / Bone Marrow Transplant Room""}
+                        ]"
+                    }
+                };
+
+                context.DeviceForms.AddRange(templates);
+                context.SaveChanges();
+            }
         }
     }
 }

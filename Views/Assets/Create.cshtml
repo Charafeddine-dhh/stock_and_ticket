@@ -1,71 +1,124 @@
 @model StockPortal.Models.Asset
+@inject StockPortal.Services.ICurrentUserService CurrentUser
 @{
-    ViewData["Title"] = "Register New Asset";
+    ViewData["Title"] = "Register New Equipment";
+    var availableForms = ViewBag.AvailableDeviceForms as List<StockPortal.Models.DeviceForm> ?? new();
+    var selectedForm = ViewBag.SelectedDeviceForm as StockPortal.Models.DeviceForm;
 }
 
 <div class="row justify-content-center">
     <div class="col-lg-10">
         <div class="card shadow-sm border-0">
             <div class="card-header bg-white py-3">
-                <h5 class="mb-0 fw-bold"><i class="fa-solid fa-box-open text-primary me-2"></i> Register New Stock / Hardware Asset</h5>
+                <h5 class="mb-0 fw-bold"><i class="fa-solid fa-box-open text-primary me-2"></i> Register Hospital Equipment Asset</h5>
             </div>
             <div class="card-body p-4">
-                <form asp-action="Create" method="post">
+                <form asp-action="Create" method="post" id="assetCreateForm">
                     @Html.AntiForgeryToken()
                     <div asp-validation-summary="ModelOnly" class="text-danger mb-3"></div>
 
-                    <h6 class="fw-bold text-muted text-uppercase mb-3 pb-2 border-bottom">1. Identification & Classification</h6>
+                    <!-- 1. Universal Device Form Selector (Forced selection) -->
+                    <div class="card bg-light border-primary border-opacity-25 mb-4">
+                        <div class="card-body p-3">
+                            <label class="form-label fw-bold fs-6 text-dark d-flex justify-content-between align-items-center">
+                                <span><i class="fa-solid fa-shapes text-primary me-2"></i> Select Universal Device Template <span class="text-danger">*</span></span>
+                                @if (CurrentUser.CanManageDeviceForms())
+                                {
+                                    <a href="@Url.Action("Index", "DeviceForms")" class="btn btn-sm btn-link text-decoration-none p-0" target="_blank">
+                                        <i class="fa-solid fa-gear me-1"></i> Manage Device Forms
+                                    </a>
+                                }
+                            </label>
+                            <select name="deviceFormId" id="deviceFormSelector" class="form-select form-select-lg fw-semibold border-primary" required>
+                                <option value="">-- Choose Equipment Type to Generate Specifications Form --</option>
+                                @foreach (var form in availableForms)
+                                {
+                                    <option value="@form.Id" 
+                                            data-name="@form.Name" 
+                                            data-department="@form.Department" 
+                                            data-schema="@form.Form"
+                                            selected="@(selectedForm?.Id == form.Id)">
+                                        @form.Name &bull; (@form.Department Maintenance)
+                                    </option>
+                                }
+                            </select>
+                            <div class="form-text small mt-1">
+                                <i class="fa-solid fa-circle-info text-primary me-1"></i>
+                                Selecting a device template dynamically builds the technical specifications form and locks maintenance routing.
+                            </div>
+                        </div>
+                    </div>
+
+                    <input type="hidden" asp-for="Type" id="hiddenAssetType" value="@(selectedForm?.Name ?? Model?.Type)" />
+                    <input type="hidden" asp-for="MaintenanceTeam" id="hiddenMaintenanceTeam" value="@(selectedForm?.Department ?? Model?.MaintenanceTeam)" />
+
+                    <!-- 2. Dynamic Specification Form (Generated from Device Template) -->
+                    <div id="dynamicSpecsContainer" class="card shadow-sm border mb-4">
+                        <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+                            <h6 class="fw-bold mb-0 text-dark">
+                                <i class="fa-solid fa-microchip text-primary me-2"></i> 
+                                <span id="specsHeaderTitle">Technical Specifications Form</span>
+                            </h6>
+                            <span class="badge bg-primary text-white" id="specsTeamBadge">
+                                @(selectedForm != null ? $"{selectedForm.Department} Engineering" : "Device Specs")
+                            </span>
+                        </div>
+                        <div class="card-body p-4">
+                            <div class="row g-3" id="dynamicFieldsRow">
+                                <div class="col-12 text-center text-muted py-3" id="noTemplateAlert">
+                                    <i class="fa-solid fa-arrow-up text-primary me-1"></i> Please choose a device template above to load its specification fields.
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 3. Hardware Asset Identification -->
+                    <h6 class="fw-bold text-muted text-uppercase mb-3 pb-2 border-bottom">3. Identification & Serial Numbers</h6>
                     <div class="row g-3 mb-4">
                         <div class="col-md-4">
-                            <label asp-for="HospitalNo" class="form-label fw-semibold">Hospital Asset Tag / ID</label>
-                            <input asp-for="HospitalNo" class="form-control" placeholder="e.g. HOSP-LAP-025" required />
+                            <label asp-for="HospitalNo" class="form-label fw-semibold">Hospital Asset Tag / Tag No <span class="text-danger">*</span></label>
+                            <input asp-for="HospitalNo" class="form-control" placeholder="e.g. HOSP-LAP-025, HOSP-BIO-010" required />
                             <span asp-validation-for="HospitalNo" class="text-danger small"></span>
                         </div>
                         <div class="col-md-4">
-                            <label asp-for="SerialNo" class="form-label fw-semibold">Serial Number</label>
+                            <label asp-for="SerialNo" class="form-label fw-semibold">Serial Number <span class="text-danger">*</span></label>
                             <input asp-for="SerialNo" class="form-control font-monospace" placeholder="e.g. SN-882910-HP" required />
                             <span asp-validation-for="SerialNo" class="text-danger small"></span>
                         </div>
                         <div class="col-md-4">
-                            <label asp-for="Type" class="form-label fw-semibold">Equipment Type</label>
-                            <input asp-for="Type" class="form-control" placeholder="e.g. Laptop, Ultrasound, Switch, Monitor" required />
-                            <span asp-validation-for="Type" class="text-danger small"></span>
+                            <label asp-for="Brand" class="form-label fw-semibold">Brand / Manufacturer <span class="text-danger">*</span></label>
+                            <input asp-for="Brand" class="form-control" placeholder="e.g. Dell, HP, Philips, GE, Carrier" required />
+                            <span asp-validation-for="Brand" class="text-danger small"></span>
                         </div>
 
-                        <div class="col-md-4">
-                            <label asp-for="Brand" class="form-label fw-semibold">Brand / Manufacturer</label>
-                            <input asp-for="Brand" class="form-control" placeholder="e.g. Dell, HP, Philips, Cisco" required />
-                        </div>
-                        <div class="col-md-4">
-                            <label asp-for="ModelNo" class="form-label fw-semibold">Model Number / Code</label>
+                        <div class="col-md-6">
+                            <label asp-for="ModelNo" class="form-label fw-semibold">Model / Version Number</label>
                             <input asp-for="ModelNo" class="form-control" placeholder="e.g. 850 or 750" />
                         </div>
-                        <div class="col-md-4">
-                            <label asp-for="SupplierId" class="form-label fw-semibold">Supplier / Vendor</label>
+                        <div class="col-md-6">
+                            <label asp-for="SupplierId" class="form-label fw-semibold">Vendor / Supplier</label>
                             <select asp-for="SupplierId" class="form-select" asp-items="ViewBag.Suppliers">
-                                <option value="">-- Select Supplier --</option>
+                                <option value="">-- Select Vendor / Supplier --</option>
                             </select>
-                        </div>
-                        <div class="col-md-4">
-                            <label asp-for="MaintenanceTeam" class="form-label fw-semibold">Designated Maintenance Team</label>
-                            <select asp-for="MaintenanceTeam" class="form-select" asp-items="ViewBag.MaintenanceTeams" required></select>
-                            <div class="form-text small">Routing target for support tickets.</div>
                         </div>
                     </div>
 
-                    <h6 class="fw-bold text-muted text-uppercase mb-3 pb-2 border-bottom">2. Initial Location & Custody</h6>
+                    <!-- 4. Location & Custody -->
+                    <h6 class="fw-bold text-muted text-uppercase mb-3 pb-2 border-bottom">4. Initial Custody & Placement</h6>
                     <div class="row g-3 mb-4">
                         <div class="col-md-4">
-                            <label asp-for="UserId" class="form-label fw-semibold">Assigned User / Custodian</label>
+                            <label asp-for="UserId" class="form-label fw-semibold">Assigned Staff / Custodian</label>
                             <select asp-for="UserId" class="form-select" asp-items="ViewBag.Users">
-                                <option value="">-- Central IT Stock (Unassigned) --</option>
+                                <option value="">-- Central Department Stock (Unassigned) --</option>
                             </select>
+                            <div class="form-text small">Staff member responsible for custody.</div>
                         </div>
                         <div class="col-md-4">
-                            <label asp-for="RoomId" class="form-label fw-semibold">Location / Room</label>
-                            <select asp-for="RoomId" class="form-select" asp-items="ViewBag.Rooms">
-                                <option value="">-- Select Room / Floor --</option>
+                            <label asp-for="RoomId" class="form-label fw-semibold">Location / Room <span class="text-danger">*</span></label>
+                            <select asp-for="RoomId" class="form-select" asp-items="ViewBag.Rooms" required>
+                                <option value="">-- Select Room Location --</option>
                             </select>
+                            <div class="form-text small">Room or clinical station.</div>
                         </div>
                         <div class="col-md-4">
                             <label asp-for="CustodyTypeId" class="form-label fw-semibold">Custody Type</label>
@@ -74,7 +127,7 @@
                         <div class="col-md-4">
                             <label asp-for="Status" class="form-label fw-semibold">Operational Status</label>
                             <select asp-for="Status" class="form-select">
-                                <option value="In Service">In Service</option>
+                                <option value="In Service" selected>In Service</option>
                                 <option value="In Stock">In Stock (Spare)</option>
                                 <option value="Under Maintenance">Under Maintenance</option>
                                 <option value="Retired">Retired / Scrapped</option>
@@ -82,7 +135,8 @@
                         </div>
                     </div>
 
-                    <h6 class="fw-bold text-muted text-uppercase mb-3 pb-2 border-bottom">3. Financial & Technical Details</h6>
+                    <!-- 5. Commercial, Warranty & Periodic Maintenance -->
+                    <h6 class="fw-bold text-muted text-uppercase mb-3 pb-2 border-bottom">5. Purchase, Warranty & Periodic Inspection</h6>
                     <div class="row g-3 mb-4">
                         <div class="col-md-4">
                             <label asp-for="Price" class="form-label fw-semibold">Purchase Price ($)</label>
@@ -93,39 +147,146 @@
                             <input asp-for="BuyingDate" class="form-control" type="date" />
                         </div>
                         <div class="col-md-4">
-                            <label asp-for="WarrantyTill" class="form-label fw-semibold">Warranty Expiration Date</label>
+                            <label asp-for="WarrantyTill" class="form-label fw-semibold">Warranty Expiration</label>
                             <input asp-for="WarrantyTill" class="form-control" type="date" />
                         </div>
-                        <div class="col-12">
-                            <label asp-for="Specs" class="form-label fw-semibold">Hardware Specifications / Configuration Details</label>
-                            <textarea asp-for="Specs" class="form-control font-monospace" rows="3" placeholder="e.g. CPU, RAM, Disk, Port count, IP address or configuration details"></textarea>
-                        </div>
-                    </div>
 
-                    <h6 class="fw-bold text-muted text-uppercase mb-3 pb-2 border-bottom">4. Preventive Maintenance Schedule</h6>
-                    <div class="row g-3 mb-4">
-                        <div class="col-md-4">
-                            <div class="form-check form-switch mt-4">
-                                <input asp-for="NeedsPeriodic" class="form-check-input" type="checkbox" id="needsPeriodicCheck" />
-                                <label class="form-check-label fw-semibold" for="needsPeriodicCheck">Requires Recurring Maintenance</label>
+                        <div class="col-md-6">
+                            <div class="form-check mt-3">
+                                <input type="checkbox" name="NeedsPeriodic" value="true" class="form-check-input" id="chkNeedsPeriodic" @(Model?.NeedsPeriodic == true ? "checked" : "") />
+                                <label class="form-check-label fw-semibold text-dark" for="chkNeedsPeriodic">
+                                    Requires Scheduled Periodic Maintenance (PM)
+                                </label>
                             </div>
                         </div>
-                        <div class="col-md-4">
-                            <label asp-for="PeriodicInterval" class="form-label fw-semibold">Interval (in Days)</label>
-                            <input asp-for="PeriodicInterval" class="form-control" type="number" placeholder="e.g. 90, 180, 365" />
-                        </div>
-                        <div class="col-md-4">
-                            <label asp-for="LastPeriodic" class="form-label fw-semibold">Last Checked Date</label>
-                            <input asp-for="LastPeriodic" class="form-control" type="date" />
+                        <div class="col-md-6" id="periodicIntervalContainer" style="display: none;">
+                            <label asp-for="PeriodicInterval" class="form-label fw-semibold">Maintenance Interval (Days)</label>
+                            <input asp-for="PeriodicInterval" class="form-control" type="number" placeholder="e.g. 90 or 180" />
                         </div>
                     </div>
 
                     <div class="d-flex justify-content-end gap-2 border-top pt-3">
                         <a href="@Url.Action("Index")" class="btn btn-outline-secondary">Cancel</a>
-                        <button type="submit" class="btn btn-primary px-4">Save Asset</button>
+                        <button type="submit" class="btn btn-primary px-4 fw-bold">
+                            <i class="fa-solid fa-paper-plane me-1"></i> Register Asset
+                        </button>
                     </div>
                 </form>
             </div>
         </div>
     </div>
 </div>
+
+@section Scripts {
+<script>
+    document.addEventListener("DOMContentLoaded", function () {
+        const selector = document.getElementById("deviceFormSelector");
+        const hiddenType = document.getElementById("hiddenAssetType");
+        const hiddenTeam = document.getElementById("hiddenMaintenanceTeam");
+        const dynamicRow = document.getElementById("dynamicFieldsRow");
+        const headerTitle = document.getElementById("specsHeaderTitle");
+        const teamBadge = document.getElementById("specsTeamBadge");
+        const noAlert = document.getElementById("noTemplateAlert");
+
+        const chkPeriodic = document.getElementById("chkNeedsPeriodic");
+        const intervalBox = document.getElementById("periodicIntervalContainer");
+
+        if (chkPeriodic && intervalBox) {
+            function toggleInterval() {
+                intervalBox.style.display = chkPeriodic.checked ? "block" : "none";
+            }
+            chkPeriodic.addEventListener("change", toggleInterval);
+            toggleInterval();
+        }
+
+        function renderDynamicFields() {
+            if (!selector.value) {
+                dynamicRow.innerHTML = `<div class="col-12 text-center text-muted py-3">
+                    <i class="fa-solid fa-arrow-up text-primary me-1"></i> Please choose a device template above to load its specification fields.
+                </div>`;
+                headerTitle.textContent = "Technical Specifications Form";
+                teamBadge.textContent = "Select Device";
+                return;
+            }
+
+            const selectedOpt = selector.options[selector.selectedIndex];
+            const name = selectedOpt.getAttribute("data-name");
+            const dept = selectedOpt.getAttribute("data-department");
+            const schemaRaw = selectedOpt.getAttribute("data-schema");
+
+            hiddenType.value = name;
+            hiddenTeam.value = dept;
+            headerTitle.textContent = `${name} Technical Specifications`;
+            teamBadge.textContent = `${dept} Maintenance`;
+
+            let fields = [];
+            try {
+                fields = JSON.parse(schemaRaw || "[]");
+            } catch (e) {
+                fields = [];
+            }
+
+            dynamicRow.innerHTML = "";
+
+            if (fields.length === 0) {
+                dynamicRow.innerHTML = `<div class="col-12 text-muted fst-italic">No custom fields defined in this template.</div>`;
+                return;
+            }
+
+            fields.forEach(f => {
+                const col = document.createElement("div");
+                col.className = (f.type === "textarea") ? "col-12" : "col-md-6";
+
+                const label = document.createElement("label");
+                label.className = "form-label fw-semibold";
+                label.innerHTML = `${f.label || f.name} ${f.required ? '<span class="text-danger">*</span>' : ''}`;
+                col.appendChild(label);
+
+                let inputEl;
+                if (f.type === "select") {
+                    inputEl = document.createElement("select");
+                    inputEl.className = "form-select";
+                    inputEl.name = `spec_${f.name}`;
+                    if (f.required) inputEl.required = true;
+
+                    const placeholderOpt = document.createElement("option");
+                    placeholderOpt.value = "";
+                    placeholderOpt.textContent = `-- Select ${f.label || f.name} --`;
+                    inputEl.appendChild(placeholderOpt);
+
+                    (f.options || []).forEach(optVal => {
+                        const opt = document.createElement("option");
+                        opt.value = optVal;
+                        opt.textContent = optVal;
+                        inputEl.appendChild(opt);
+                    });
+                } else if (f.type === "textarea") {
+                    inputEl = document.createElement("textarea");
+                    inputEl.className = "form-control";
+                    inputEl.name = `spec_${f.name}`;
+                    inputEl.rows = 2;
+                    inputEl.placeholder = f.placeholder || "";
+                    if (f.required) inputEl.required = true;
+                } else {
+                    inputEl = document.createElement("input");
+                    inputEl.className = "form-control";
+                    inputEl.type = (f.type === "number") ? "number" : "text";
+                    inputEl.name = `spec_${f.name}`;
+                    inputEl.placeholder = f.placeholder || "";
+                    if (f.required) inputEl.required = true;
+                }
+
+                col.appendChild(inputEl);
+                dynamicRow.appendChild(col);
+            });
+        }
+
+        selector.addEventListener("change", renderDynamicFields);
+
+        // Run on initial page load if pre-selected
+        if (selector.value) {
+            renderDynamicFields();
+        }
+    });
+</script>
+}

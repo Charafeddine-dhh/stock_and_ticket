@@ -256,6 +256,12 @@
 
                 <li class="nav-category mt-3">Administration</li>
                 <li>
+                    <a href="@Url.Action("Index", "DeviceForms")" class="nav-link @(ViewContext.RouteData.Values["Controller"]?.ToString() == "DeviceForms" ? "active" : "")">
+                        <i class="fa-solid fa-shapes"></i>
+                        <span>Device Forms & Templates</span>
+                    </a>
+                </li>
+                <li>
                     <a href="@Url.Action("Index", "Directory")" class="nav-link @(ViewContext.RouteData.Values["Controller"]?.ToString() == "Directory" ? "active" : "")">
                         <i class="fa-solid fa-sitemap"></i>
                         <span>Master Directory & RBAC</span>
@@ -295,6 +301,12 @@
                         {
                             <span class="badge bg-warning text-dark rounded-pill" style="font-size: 0.7rem;">@overdueMaintCount</span>
                         }
+                    </a>
+                </li>
+                <li>
+                    <a href="@Url.Action("Index", "DeviceForms")" class="nav-link @(ViewContext.RouteData.Values["Controller"]?.ToString() == "DeviceForms" ? "active" : "")">
+                        <i class="fa-solid fa-shapes text-warning"></i>
+                        <span>Device Forms & Specs</span>
                     </a>
                 </li>
 

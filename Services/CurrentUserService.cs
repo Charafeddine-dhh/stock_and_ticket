@@ -26,6 +26,10 @@ namespace StockPortal.Services
         bool CanManageTicket(Ticket ticket);
         bool CanAccessAsset(Asset asset);
         bool CanManageAssets();
+        bool CanManageAsset(Asset asset);
+        bool CanCreateAssetInDepartment(string department);
+        bool CanManageDeviceForms();
+        bool CanManageDeviceForm(DeviceForm form);
         bool CanManageUsers();
     }
 
@@ -176,7 +180,49 @@ namespace StockPortal.Services
 
         public bool CanManageAssets()
         {
-            return IsAdmin();
+            return IsAdmin() || IsMaintenance();
+        }
+
+        public bool CanManageAsset(Asset asset)
+        {
+            if (asset == null) return false;
+            if (IsAdmin()) return true;
+
+            if (IsMaintenance())
+            {
+                var myTeam = GetMaintenanceTeam();
+                return string.Equals(asset.MaintenanceTeam, myTeam, StringComparison.OrdinalIgnoreCase);
+            }
+
+            return false;
+        }
+
+        public bool CanCreateAssetInDepartment(string department)
+        {
+            if (IsAdmin()) return true;
+            if (IsMaintenance())
+            {
+                var myTeam = GetMaintenanceTeam();
+                return string.Equals(department, myTeam, StringComparison.OrdinalIgnoreCase);
+            }
+            return false;
+        }
+
+        public bool CanManageDeviceForms()
+        {
+            return IsAdmin() || IsMaintenance();
+        }
+
+        public bool CanManageDeviceForm(DeviceForm form)
+        {
+            if (form == null) return false;
+            if (IsAdmin()) return true;
+            if (IsMaintenance())
+            {
+                var myTeam = GetMaintenanceTeam();
+                return string.Equals(form.Department, myTeam, StringComparison.OrdinalIgnoreCase);
+            }
+            return false;
         }
 
         public bool CanManageUsers()

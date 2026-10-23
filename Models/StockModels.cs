@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace StockPortal.Models
 {
@@ -502,5 +504,63 @@ namespace StockPortal.Models
 
         [NotMapped]
         public string TypeName => MaintenanceType == 2 ? "Preventive / Periodic" : "Breakdown / Repair";
+    }
+
+    [Table("device_forms")]
+    public class DeviceForm
+    {
+        [Key]
+        [Column("id")]
+        [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
+        public int Id { get; set; }
+
+        [Column("name")]
+        [Required]
+        [StringLength(255)]
+        [Display(Name = "Device Type / Template Name")]
+        public string Name { get; set; } = string.Empty;
+
+        [Column("department")]
+        [Required]
+        [StringLength(50)]
+        [Display(Name = "Maintenance Department")]
+        public string Department { get; set; } = MaintenanceTeams.IT;
+
+        [Column("form")]
+        [Required]
+        [Display(Name = "Form Field Schema (JSON)")]
+        public string Form { get; set; } = "[]";
+
+        [NotMapped]
+        public List<FormFieldDefinition> Fields
+        {
+            get
+            {
+                if (string.IsNullOrWhiteSpace(Form)) return new List<FormFieldDefinition>();
+                try
+                {
+                    return JsonSerializer.Deserialize<List<FormFieldDefinition>>(Form, 
+                        new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new List<FormFieldDefinition>();
+                }
+                catch
+                {
+                    return new List<FormFieldDefinition>();
+                }
+            }
+            set
+            {
+                Form = JsonSerializer.Serialize(value);
+            }
+        }
+    }
+
+    public class FormFieldDefinition
+    {
+        public string Name { get; set; } = string.Empty;
+        public string Label { get; set; } = string.Empty;
+        public string Type { get; set; } = "text"; // "text", "number", "select", "textarea"
+        public List<string> Options { get; set; } = new List<string>();
+        public bool Required { get; set; } = false;
+        public string? Placeholder { get; set; }
     }
 }

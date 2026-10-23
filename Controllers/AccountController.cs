@@ -21,7 +21,9 @@ namespace StockPortal.Controllers
             _currentUserService = currentUserService;
         }
 
-        // GET: Account/SwitchUser?id=2
+        // POST: Account/SwitchUser (Only allowed via POST with Anti-Forgery Token, URL GET tampering blocked)
+        [HttpPost]
+        [ValidateAntiForgeryToken]
         public async Task<IActionResult> SwitchUser(int id, string? returnUrl)
         {
             if (id > 0)
@@ -84,9 +86,20 @@ namespace StockPortal.Controllers
         // GET: Account/AccessDenied
         [HttpGet]
         [ResponseCache(Duration = 0, Location = ResponseCacheLocation.None, NoStore = true)]
-        public async Task<IActionResult> AccessDenied(string? reason, string? username)
+        public async Task<IActionResult> AccessDenied(string? reason, string? username, string? returnUrl)
         {
             Response.StatusCode = StatusCodes.Status403Forbidden;
+            var currentUser = _currentUserService.GetCurrentUser();
+
+            // If user is authenticated and active, but got forbidden due to RBAC route guard
+            if (currentUser != null && currentUser.IsActive == true)
+            {
+                ViewBag.Reason = "ForbiddenResource";
+                ViewBag.ReturnUrl = returnUrl;
+                ViewBag.CurrentUser = currentUser;
+                return View();
+            }
+
             ViewBag.Reason = reason ?? "NotFound";
             string resolvedUser = username ?? Environment.UserName;
             ViewBag.Username = resolvedUser;
