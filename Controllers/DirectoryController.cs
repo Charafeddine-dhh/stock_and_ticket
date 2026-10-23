@@ -36,9 +36,13 @@ namespace StockPortal.Controllers
             if (!string.IsNullOrWhiteSpace(user.FullName))
             {
                 user.IsActive = true;
+                if (!string.IsNullOrWhiteSpace(user.DomainUser))
+                {
+                    user.DomainUser = user.DomainUser.Trim();
+                }
                 _context.Users.Add(user);
                 await _context.SaveChangesAsync();
-                TempData["SuccessMessage"] = $"User {user.FullName} added successfully.";
+                TempData["SuccessMessage"] = $"User {user.FullName} (PC Username: {user.DomainUser}) registered successfully with Auto-Login enabled.";
             }
             return RedirectToAction(nameof(Index));
         }

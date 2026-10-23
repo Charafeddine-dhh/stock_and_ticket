@@ -26,17 +26,21 @@ namespace StockPortal.Controllers
             if (id > 0)
             {
                 var user = await _context.Users.FindAsync(id);
-                if (user != null)
+                if (user != null && user.IsActive == true)
                 {
                     HttpContext.Session.SetInt32("ActiveUserId", user.Id);
                     TempData["SuccessMessage"] = $"Switched profile to: {user.FullName} ({user.Role})";
+                }
+                else
+                {
+                    TempData["ErrorMessage"] = "Cannot switch to an inactive or non-existent user.";
                 }
             }
             else
             {
                 // Revert to detected domain user
                 HttpContext.Session.Remove("ActiveUserId");
-                TempData["SuccessMessage"] = $"Reverted to Windows Domain identity ({Environment.UserName}).";
+                TempData["SuccessMessage"] = $"Reverted to Windows PC identity ({Environment.UserName}).";
             }
 
             if (!string.IsNullOrEmpty(returnUrl) && Url.IsLocalUrl(returnUrl))
@@ -78,15 +82,12 @@ namespace StockPortal.Controllers
 
         // GET: Account/AccessDenied
         [HttpGet]
-        public async Task<IActionResult> AccessDenied(string? reason, string? username)
+        [ResponseCache(Duration = 0, Location = ResponseCacheLocation.None, NoStore = true)]
+        public IActionResult AccessDenied(string? reason, string? username)
         {
+            Response.StatusCode = StatusCodes.Status403Forbidden;
             ViewBag.Reason = reason ?? "NotFound";
             ViewBag.Username = username ?? Environment.UserName;
-            ViewBag.ActiveUsers = await _context.Users
-                .Include(u => u.Department)
-                .Where(u => u.IsActive == true)
-                .OrderBy(u => u.FullName)
-                .ToListAsync();
 
             return View();
         }

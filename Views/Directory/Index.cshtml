@@ -44,7 +44,10 @@
             <!-- 1. Users Tab -->
             <div class="tab-pane fade show active" id="users" role="tabpanel">
                 <div class="d-flex justify-content-between align-items-center mb-3">
-                    <h6 class="fw-bold mb-0">Hospital Staff & Technicians</h6>
+                    <div>
+                        <h6 class="fw-bold mb-0">Hospital Staff & Authorized Users</h6>
+                        <small class="text-muted">Users with <strong>Active</strong> status are automatically authenticated via their PC username. Inactive users are rejected.</small>
+                    </div>
                     <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#addUserModal">
                         <i class="fa-solid fa-plus me-1"></i> Add User
                     </button>
@@ -55,10 +58,10 @@
                             <tr>
                                 <th>#</th>
                                 <th>Full Name</th>
-                                <th>Username</th>
+                                <th>PC / Windows Username</th>
                                 <th>Department</th>
                                 <th>Role / Title</th>
-                                <th>Status</th>
+                                <th>Auto-Login Status</th>
                                 <th class="text-end">Action</th>
                             </tr>
                         </thead>
@@ -68,19 +71,28 @@
                                 <tr>
                                     <td>@u.Id</td>
                                     <td class="fw-semibold">@u.FullName</td>
-                                    <td><code class="text-dark">@(u.DomainUser ?? "-")</code></td>
+                                    <td><code class="text-primary fw-bold bg-light px-2 py-1 rounded">@(u.DomainUser ?? "-")</code></td>
                                     <td>@(u.Department?.Name ?? "Unassigned")</td>
                                     <td>@u.Role</td>
                                     <td>
-                                        <span class="badge @(u.IsActive == true ? "bg-success" : "bg-secondary")">
-                                            @(u.IsActive == true ? "Active" : "Inactive")
-                                        </span>
+                                        @if (u.IsActive == true)
+                                        {
+                                            <span class="badge bg-success bg-opacity-10 text-success border border-success">
+                                                <i class="fa-solid fa-circle-check me-1"></i> Active (Auto-Login)
+                                            </span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-danger bg-opacity-10 text-danger border border-danger">
+                                                <i class="fa-solid fa-ban me-1"></i> Inactive (Rejected)
+                                            </span>
+                                        }
                                     </td>
                                     <td class="text-end">
                                         <form asp-action="ToggleUserStatus" method="post" class="d-inline">
                                             @Html.AntiForgeryToken()
                                             <input type="hidden" name="id" value="@u.Id" />
-                                            <button type="submit" class="btn btn-sm @(u.IsActive == true ? "btn-outline-secondary" : "btn-outline-success")" title="Toggle active status">
+                                            <button type="submit" class="btn btn-sm @(u.IsActive == true ? "btn-outline-danger" : "btn-outline-success")" title="Toggle active/inactive status">
                                                 @(u.IsActive == true ? "Deactivate" : "Activate")
                                             </button>
                                         </form>
@@ -238,12 +250,15 @@
                 </div>
                 <div class="modal-body">
                     <div class="mb-3">
-                        <label class="form-label fw-semibold">Full Name</label>
-                        <input type="text" name="FullName" class="form-control" required />
+                        <label class="form-label fw-semibold">Full Name <span class="text-danger">*</span></label>
+                        <input type="text" name="FullName" class="form-control" placeholder="e.g. John Doe" required />
                     </div>
                     <div class="mb-3">
-                        <label class="form-label fw-semibold">Domain Username</label>
-                        <input type="text" name="DomainUser" class="form-control" placeholder="e.g. j.smith" />
+                        <label class="form-label fw-semibold">PC / Windows Username (for Auto-Login) <span class="text-danger">*</span></label>
+                        <input type="text" name="DomainUser" class="form-control font-monospace" placeholder="e.g. @Environment.UserName" required />
+                        <div class="form-text small text-muted">
+                            <i class="fa-solid fa-circle-info me-1"></i> Must match the user's computer account name. Auto-login grants instant access when they open the site from their PC.
+                        </div>
                     </div>
                     <div class="mb-3">
                         <label class="form-label fw-semibold">Role / Job Title</label>

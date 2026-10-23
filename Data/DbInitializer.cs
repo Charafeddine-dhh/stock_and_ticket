@@ -78,6 +78,8 @@ namespace StockPortal.Data
             }
 
             // Seed Users if empty
+            string currentPcUser = string.IsNullOrWhiteSpace(Environment.UserName) ? "Abbas" : Environment.UserName;
+
             if (!context.Users.Any())
             {
                 var itDept = context.Departments.FirstOrDefault(d => d.Name == "Information Technology");
@@ -87,11 +89,12 @@ namespace StockPortal.Data
 
                 var users = new[]
                 {
-                    new User { FullName = "Abbas Al-Amiri", DomainUser = "a.amiri", Role = "IT Manager & Lead SysAdmin", DepartmentId = itDept?.Id, IsActive = true },
+                    new User { FullName = "Abbas Al-Amiri", DomainUser = currentPcUser, Role = "IT Manager & Lead SysAdmin", DepartmentId = itDept?.Id, IsActive = true },
                     new User { FullName = "Ahmed Mansour", DomainUser = "a.mansour", Role = "Field Support Technician", DepartmentId = itDept?.Id, IsActive = true },
                     new User { FullName = "Dr. Sarah Jenkins", DomainUser = "s.jenkins", Role = "Lead Cardiologist", DepartmentId = cardDept?.Id, IsActive = true },
                     new User { FullName = "Dr. Elena Rostova", DomainUser = "e.rostova", Role = "Radiology Consultant", DepartmentId = radDept?.Id, IsActive = true },
-                    new User { FullName = "Tariq Ziad", DomainUser = "t.ziad", Role = "Biomedical Equipment Engineer", DepartmentId = bioDept?.Id, IsActive = true }
+                    new User { FullName = "Tariq Ziad", DomainUser = "t.ziad", Role = "Biomedical Equipment Engineer", DepartmentId = bioDept?.Id, IsActive = true },
+                    new User { FullName = "Former Staff", DomainUser = "inactive.user", Role = "Inactive Account", DepartmentId = itDept?.Id, IsActive = false }
                 };
                 context.Users.AddRange(users);
                 context.SaveChanges();
@@ -99,6 +102,37 @@ namespace StockPortal.Data
                 if (itDept != null && users.Length > 0)
                 {
                     itDept.HeadUserId = users[0].Id;
+                    context.SaveChanges();
+                }
+            }
+            else
+            {
+                // Ensure existing database has the current workstation user mapped to active administrator
+                var adminUser = context.Users.FirstOrDefault(u => 
+                    u.FullName == "Abbas Al-Amiri" || 
+                    u.DomainUser == "a.amiri" || 
+                    u.DomainUser == "Abbas" ||
+                    u.DomainUser == currentPcUser
+                );
+
+                if (adminUser != null && adminUser.DomainUser != currentPcUser)
+                {
+                    adminUser.DomainUser = currentPcUser;
+                    adminUser.IsActive = true;
+                    context.SaveChanges();
+                }
+
+                // Ensure inactive test account exists
+                if (!context.Users.Any(u => u.DomainUser == "inactive.user"))
+                {
+                    context.Users.Add(new User
+                    {
+                        FullName = "Former Staff",
+                        DomainUser = "inactive.user",
+                        Role = "Inactive Account",
+                        DepartmentId = 1,
+                        IsActive = false
+                    });
                     context.SaveChanges();
                 }
             }

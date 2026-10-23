@@ -25,97 +25,116 @@ namespace StockPortal.Middleware
         {
             var path = context.Request.Path.Value?.ToLower() ?? "";
 
-            // 1. Bypass authentication check for static assets and public/error endpoints
+            // 1. Bypass authentication check for static assets and the AccessDenied rejection page
             if (path.StartsWith("/css") ||
                 path.StartsWith("/js") ||
                 path.StartsWith("/lib") ||
                 path.StartsWith("/images") ||
                 path.StartsWith("/favicon.ico") ||
-                path.StartsWith("/account/accessdenied") ||
-                path.StartsWith("/account/switchuser"))
+                path.StartsWith("/account/accessdenied"))
             {
                 await _next(context);
                 return;
             }
 
-            // 2. Check if user has an explicit active session switch (for testing identities)
+            // 2. Resolve PC / Windows Username
+            // Check in order:
+            // a) Windows Authentication / Negotiate identity name
+            // b) Reverse proxy / IIS headers (LOGON_USER, REMOTE_USER, X-Remote-User)
+            // c) Local desktop workstation username (Environment.UserName)
+            string? rawUser = context.User.Identity?.Name;
+
+            if (string.IsNullOrWhiteSpace(rawUser))
+            {
+                rawUser = context.Request.Headers["LOGON_USER"].FirstOrDefault()
+                    ?? context.Request.Headers["REMOTE_USER"].FirstOrDefault()
+                    ?? context.Request.Headers["X-Remote-User"].FirstOrDefault();
+            }
+
+            if (string.IsNullOrWhiteSpace(rawUser))
+            {
+                rawUser = Environment.UserName;
+            }
+
+            // Normalize PC username: strip DOMAIN\ or user@domain
+            string cleanUsername = rawUser ?? "";
+            if (cleanUsername.Contains('\\'))
+            {
+                cleanUsername = cleanUsername.Split('\\').Last();
+            }
+            if (cleanUsername.Contains('@'))
+            {
+                cleanUsername = cleanUsername.Split('@').First();
+            }
+            cleanUsername = cleanUsername.Trim();
+
+            // If no username can be resolved at all, reject
+            if (string.IsNullOrWhiteSpace(cleanUsername))
+            {
+                context.Response.Redirect("/Account/AccessDenied?reason=NotFound&username=Unknown");
+                return;
+            }
+
+            // 3. Optional session override (allowed only if an already-authenticated user switches role)
             var sessionUserId = context.Session.GetInt32("ActiveUserId");
             User? matchedUser = null;
 
             if (sessionUserId.HasValue)
             {
-                matchedUser = await dbContext.Users
+                var switchedUser = await dbContext.Users
                     .Include(u => u.Department)
                     .FirstOrDefaultAsync(u => u.Id == sessionUserId.Value);
 
-                // If switched user was deactivated or deleted, clear the session
-                if (matchedUser != null && matchedUser.IsActive != true)
+                if (switchedUser != null && switchedUser.IsActive == true)
                 {
+                    matchedUser = switchedUser;
+                }
+                else
+                {
+                    // Clear invalid or deactivated override
                     context.Session.Remove("ActiveUserId");
-                    matchedUser = null;
                 }
             }
 
-            // 3. Auto-detect domain/PC user if no manual session override
-            string cleanUsername = "";
+            // 4. Query database for user matching PC username
             if (matchedUser == null)
             {
-                string? rawDomainUser = context.User.Identity?.Name;
+                var search = cleanUsername.ToLower();
 
-                if (string.IsNullOrWhiteSpace(rawDomainUser))
-                {
-                    rawDomainUser = context.Request.Headers["X-Remote-User"].FirstOrDefault()
-                        ?? context.Request.Headers["LOGON_USER"].FirstOrDefault();
-                }
-
-                if (string.IsNullOrWhiteSpace(rawDomainUser))
-                {
-                    // Intranet Windows fallback (e.g. PC username "Abbas")
-                    rawDomainUser = Environment.UserName;
-                }
-
-                cleanUsername = rawDomainUser ?? "Guest";
-                if (cleanUsername.Contains('\\'))
-                {
-                    cleanUsername = cleanUsername.Split('\\').Last();
-                }
-
-                // Match against users table in database by DomainUser or FullName
+                // Exact match on DomainUser (PC username) or full domain\user
                 matchedUser = await dbContext.Users
                     .Include(u => u.Department)
                     .FirstOrDefaultAsync(u =>
-                        (u.DomainUser != null && u.DomainUser.ToLower() == cleanUsername.ToLower()) ||
-                        (u.DomainUser != null && rawDomainUser != null && u.DomainUser.ToLower() == rawDomainUser.ToLower()) ||
-                        (u.FullName != null && u.FullName.ToLower() == cleanUsername.ToLower()) ||
-                        (u.FullName != null && u.FullName.ToLower().StartsWith(cleanUsername.ToLower()))
+                        (u.DomainUser != null && u.DomainUser.ToLower() == search) ||
+                        (rawUser != null && u.DomainUser != null && u.DomainUser.ToLower() == rawUser.ToLower()) ||
+                        (u.FullName != null && u.FullName.ToLower() == search) ||
+                        (u.FullName != null && u.FullName.ToLower().StartsWith(search + " "))
                     );
             }
-            else
-            {
-                cleanUsername = matchedUser.DomainUser ?? matchedUser.FullName ?? "User";
-            }
 
-            // 4. REJECTION CHECK: User not found in database
+            // 5. REJECTION CHECK 1: User not found in database
             if (matchedUser == null)
             {
+                context.Session.Clear();
                 context.Response.Redirect($"/Account/AccessDenied?reason=NotFound&username={Uri.EscapeDataString(cleanUsername)}");
                 return;
             }
 
-            // 5. REJECTION CHECK: User found but inactive
+            // 6. REJECTION CHECK 2: User found, but INACTIVE
             if (matchedUser.IsActive != true)
             {
+                context.Session.Clear();
                 context.Response.Redirect($"/Account/AccessDenied?reason=Inactive&username={Uri.EscapeDataString(cleanUsername)}");
                 return;
             }
 
-            // 6. AUTO LOGIN: User is active and authorized
+            // 7. AUTO-LOGIN: User found and ACTIVE!
             context.Items["CurrentUser"] = matchedUser;
 
             var claims = new List<Claim>
             {
                 new Claim(ClaimTypes.NameIdentifier, matchedUser.Id.ToString()),
-                new Claim(ClaimTypes.Name, matchedUser.FullName ?? matchedUser.DomainUser ?? "User"),
+                new Claim(ClaimTypes.Name, matchedUser.FullName ?? matchedUser.DomainUser ?? cleanUsername),
                 new Claim(ClaimTypes.Role, matchedUser.Role ?? "Staff"),
                 new Claim("DomainUser", matchedUser.DomainUser ?? cleanUsername),
                 new Claim("Department", matchedUser.Department?.Name ?? "General")

@@ -2,7 +2,6 @@
     Layout = null;
     string reason = (ViewBag.Reason as string) ?? "NotFound";
     string username = (ViewBag.Username as string) ?? Environment.UserName;
-    var activeUsers = ViewBag.ActiveUsers as List<StockPortal.Models.User> ?? new();
     bool isInactive = reason.Equals("Inactive", StringComparison.OrdinalIgnoreCase);
 }
 <!DOCTYPE html>
@@ -36,8 +35,8 @@
         .auth-card {
             background: #ffffff;
             border-radius: 1.25rem;
-            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.35);
-            max-width: 540px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.45);
+            max-width: 520px;
             width: 100%;
             overflow: hidden;
             border: 1px solid rgba(255, 255, 255, 0.1);
@@ -49,26 +48,26 @@
         }
 
         .icon-circle {
-            width: 80px;
-            height: 80px;
+            width: 84px;
+            height: 84px;
             border-radius: 50%;
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            font-size: 2.2rem;
+            font-size: 2.3rem;
             margin-bottom: 1.25rem;
         }
 
         .icon-inactive {
             background-color: #fef2f2;
             color: #ef4444;
-            border: 2px solid #fecaca;
+            border: 3px solid #fecaca;
         }
 
         .icon-notfound {
             background-color: #fffbeb;
-            color: #f59e0b;
-            border: 2px solid #fde68a;
+            color: #d97706;
+            border: 3px solid #fde68a;
         }
 
         .diagnostic-box {
@@ -96,7 +95,7 @@
                 </div>
                 <h3 class="fw-bold text-danger mb-2">Account Deactivated</h3>
                 <p class="text-muted mb-0">
-                    Your Windows account <code class="fw-bold text-dark bg-light px-2 py-1 rounded">@username</code> is registered but currently marked as <strong>Inactive</strong>.
+                    Your PC account <code class="fw-bold text-dark bg-light px-2 py-1 rounded">@username</code> is registered but currently marked as <strong>Inactive</strong>.
                 </p>
             }
             else
@@ -106,7 +105,7 @@
                 </div>
                 <h3 class="fw-bold text-warning-emphasis mb-2">Access Denied</h3>
                 <p class="text-muted mb-0">
-                    No matching active account was found for Windows user <code class="fw-bold text-dark bg-light px-2 py-1 rounded">@username</code>.
+                    No matching authorized account was found for PC username <code class="fw-bold text-dark bg-light px-2 py-1 rounded">@username</code>.
                 </p>
             }
         </div>
@@ -115,7 +114,7 @@
             <div class="diagnostic-box mb-4">
                 <div class="d-flex justify-content-between mb-2">
                     <span class="text-muted">Detected PC Username:</span>
-                    <strong class="font-monospace">@username</strong>
+                    <strong class="font-monospace text-dark">@username</strong>
                 </div>
                 <div class="d-flex justify-content-between mb-2">
                     <span class="text-muted">Domain / Workstation:</span>
@@ -123,58 +122,37 @@
                 </div>
                 <div class="d-flex justify-content-between mb-2">
                     <span class="text-muted">Access Policy:</span>
-                    <span class="badge bg-danger">Auto-Login Rejected</span>
+                    <span class="badge @(isInactive ? "bg-danger" : "bg-warning text-dark")">Auto-Login Rejected</span>
                 </div>
                 <div class="d-flex justify-content-between">
-                    <span class="text-muted">Status:</span>
-                    <span class="text-danger fw-semibold">HTTP 403 Forbidden</span>
+                    <span class="text-muted">HTTP Status:</span>
+                    <span class="text-danger fw-semibold">403 Forbidden</span>
                 </div>
             </div>
 
             <div class="alert @(isInactive ? "alert-danger" : "alert-warning") border-0 d-flex gap-3 align-items-start small mb-4">
-                <i class="fa-solid fa-circle-exclamation mt-1"></i>
+                <i class="fa-solid fa-circle-exclamation mt-1 fs-5"></i>
                 <div>
                     @if (isInactive)
                     {
-                        <span>Your account clearance has been suspended. Please contact your department manager or IT support to reactivate your portal privileges.</span>
+                        <span>Your login privileges have been deactivated by an IT administrator. Please contact your system administrator or department manager to reactivate your account.</span>
                     }
                     else
                     {
-                        <span>Only authorized personnel registered in the IT Master Directory can access the stock and ticketing systems. Please request an account from the IT department.</span>
+                        <span>Only authorized personnel registered in the IT Master Directory can access the stock and ticketing system. Please request your IT administrator to register your PC username <code>@username</code>.</span>
                     }
                 </div>
             </div>
 
-            <div class="d-grid gap-2">
+            <div class="d-grid gap-2 mb-3">
                 <a href="@Url.Action("Index", "Home")" class="btn btn-primary btn-retry">
                     <i class="fa-solid fa-arrow-rotate-right me-2"></i> Retry Auto-Login
                 </a>
             </div>
 
-            @if (activeUsers.Any())
-            {
-                <div class="mt-4 pt-3 border-top text-center">
-                    <small class="text-muted d-block mb-2"><i class="fa-solid fa-flask me-1"></i> Developer & Admin Testing Switcher:</small>
-                    <div class="dropdown">
-                        <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
-                            Select Active User to Test
-                        </button>
-                        <ul class="dropdown-menu dropdown-menu-end shadow border-0" style="max-height: 250px; overflow-y: auto;">
-                            <li><h6 class="dropdown-header">Active Directory Users</h6></li>
-                            @foreach (var user in activeUsers)
-                            {
-                                <li>
-                                    <a class="dropdown-item d-flex justify-content-between align-items-center" 
-                                       href="@Url.Action("SwitchUser", "Account", new { id = user.Id, returnUrl = "/" })">
-                                        <span>@user.FullName</span>
-                                        <small class="text-muted ms-2">(@user.Role)</small>
-                                    </a>
-                                </li>
-                            }
-                        </ul>
-                    </div>
-                </div>
-            }
+            <div class="text-center text-muted small">
+                IT Support Desk &bull; Host: <code>@Environment.MachineName</code>
+            </div>
         </div>
     </div>
 
