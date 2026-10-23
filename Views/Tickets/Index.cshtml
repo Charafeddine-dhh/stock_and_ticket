@@ -3,13 +3,17 @@
 @{
     ViewData["Title"] = CurrentUser.IsEndUser() ? "My Service Tickets" : "Service & Support Tickets";
     var statuses = ViewBag.Statuses as List<StockPortal.Models.TicketStatus> ?? new();
+    var allTechs = ViewBag.AllTechnicians as List<StockPortal.Models.User> ?? new();
     var currentFilter = ViewBag.SelectedFilter as string;
 }
 
 <!-- Header & Quick Stats Navigation -->
 <div class="d-flex justify-content-between align-items-center mb-4">
     <div>
-        <h4 class="fw-bold mb-0">@(CurrentUser.IsEndUser() ? "My Service Tickets" : "Helpdesk & Support Tickets")</h4>
+        <h4 class="fw-bold mb-0">
+            @(CurrentUser.IsEndUser() ? "My Service Tickets" : "Helpdesk & Support Tickets")
+            <span class="badge bg-primary fs-6 align-middle ms-2">@Model.Count() Tickets</span>
+        </h4>
         <small class="text-muted">
             @(CurrentUser.IsEndUser() ? "View and track tickets opened by you for your hospital equipment" : "Manage service tickets, technician dispatches, and issue resolutions across teams")
         </small>
@@ -29,7 +33,7 @@
     <div class="alert alert-primary d-flex align-items-center gap-2 mb-4 shadow-sm border-0">
         <i class="fa-solid fa-users-gear fs-4"></i>
         <div>
-            <strong>@CurrentUser.GetMaintenanceTeam() Maintenance Queue:</strong> You are viewing tickets routed directly to your engineering team.
+            <strong>@CurrentUser.GetMaintenanceTeam() Maintenance Queue:</strong> You are viewing tickets routed directly to your engineering team (@Model.Count() tickets).
         </div>
     </div>
 }
@@ -60,6 +64,10 @@
                    class="btn btn-sm @(ViewBag.SelectedStatusId == null ? "btn-secondary" : "btn-outline-secondary")">
                     All Statuses
                 </a>
+                <a href="@Url.Action("Index", new { statusId = -1, priority = ViewBag.SelectedPriority, type = ViewBag.SelectedType, filter = currentFilter })" 
+                   class="btn btn-sm @(ViewBag.SelectedStatusId == -1 ? "btn-primary" : "btn-outline-secondary")">
+                    <i class="fa-solid fa-clock-rotate-left me-1"></i> Not Closed
+                </a>
                 @foreach (var st in statuses)
                 {
                     <a href="@Url.Action("Index", new { statusId = st.Id, priority = ViewBag.SelectedPriority, type = ViewBag.SelectedType, filter = currentFilter })" 
@@ -69,8 +77,8 @@
                 }
             </div>
 
-            <!-- Priority & Search filters -->
-            <form method="get" class="d-flex gap-2 align-items-center">
+            <!-- Priority & Search filters: Search button removed, live onchange/oninput filter refresh -->
+            <form method="get" class="d-flex gap-2 align-items-center" id="ticketFilterForm">
                 <input type="hidden" name="statusId" value="@ViewBag.SelectedStatusId" />
                 <input type="hidden" name="filter" value="@currentFilter" />
 
@@ -90,9 +98,13 @@
                     <option value="Network" selected="@(ViewBag.SelectedType == "Network")">Network</option>
                 </select>
 
-                <input type="text" name="search" value="@ViewBag.Search" class="form-control form-control-sm" placeholder="Ticket #, asset, user..." style="width: 200px;" />
-                <button type="submit" class="btn btn-sm btn-outline-primary"><i class="fa-solid fa-magnifying-glass"></i></button>
-                <a href="@Url.Action("Index")" class="btn btn-sm btn-outline-secondary" title="Clear Filters"><i class="fa-solid fa-rotate-left"></i></a>
+                <div class="position-relative">
+                    <input type="text" id="ticketSearchInput" name="search" value="@ViewBag.Search" class="form-control form-control-sm" placeholder="Search ticket, asset, user..." style="width: 220px;" oninput="debouncedFilterSubmit()" onchange="this.form.submit()" />
+                </div>
+                @if (!string.IsNullOrWhiteSpace(ViewBag.Search as string) || ViewBag.SelectedPriority != null || !string.IsNullOrWhiteSpace(ViewBag.SelectedType as string))
+                {
+                    <a href="@Url.Action("Index", new { statusId = ViewBag.SelectedStatusId, filter = currentFilter })" class="btn btn-sm btn-outline-secondary" title="Clear Filters"><i class="fa-solid fa-rotate-left"></i></a>
+                }
             </form>
         </div>
     </div>
@@ -201,15 +213,47 @@
                                 }
                             </td>
                             <td>
-                                @if (ticket.Handler?.TechUser != null)
+                                @{
+                                    bool canReassignTech = ticket.StatusId != 5 && !ticket.ClosedDT.HasValue && (CurrentUser.IsAdmin() || CurrentUser.IsMaintenance() || ticket.OpenedBy == CurrentUser.GetUserId() || ticket.OnBehalfOf == CurrentUser.GetUserId());
+                                    var matchingTechs = allTechs.Where(u => u.Role == "ADMIN" || string.Equals(u.MaintenanceTeam, ticket.TargetTeam, StringComparison.OrdinalIgnoreCase)).ToList();
+                                }
+                                @if (canReassignTech && matchingTechs.Any())
                                 {
-                                    <span class="badge bg-light text-dark border">
-                                        <i class="fa-solid fa-user-gear text-primary me-1"></i> @ticket.Handler.TechUser.FullName
-                                    </span>
+                                    <form asp-action="AssignTechnician" method="post" class="d-inline">
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="ticketId" value="@ticket.Id" />
+                                        <input type="hidden" name="returnUrl" value="@Context.Request.Path@Context.Request.QueryString" />
+                                        <select name="techUserId" class="form-select form-select-sm py-0 px-2 fw-semibold @(ticket.Handler?.TechUserId != null ? "text-dark border-secondary" : "text-danger border-danger")"
+                                                style="font-size: 0.75rem; width: auto; max-width: 175px; display: inline-block; cursor: pointer;"
+                                                onchange="this.form.submit()" title="Assign / Reassign Specialist (@ticket.TargetTeam)">
+                                            <option value="0" selected="@(ticket.Handler?.TechUserId == null)">-- Unassigned --</option>
+                                            @foreach (var tech in matchingTechs)
+                                            {
+                                                <option value="@tech.Id" selected="@(ticket.Handler?.TechUserId == tech.Id)">
+                                                    @tech.FullName (@(tech.Role == "ADMIN" ? "Admin" : tech.RoleDisplay))
+                                                </option>
+                                            }
+                                        </select>
+                                    </form>
                                 }
                                 else
                                 {
-                                    <span class="badge bg-danger bg-opacity-10 text-danger">Unassigned</span>
+                                    @if (ticket.Handler?.TechUser != null)
+                                    {
+                                        <span class="badge bg-light text-dark border">
+                                            <i class="fa-solid fa-user-gear text-primary me-1"></i> @ticket.Handler.TechUser.FullName
+                                            @if (ticket.Handler.TechUser.Role == "MAINTENANCE")
+                                            {
+                                                <span class="badge @(ticket.Handler.TechUser.MaintenanceTeam == "BIOMEDICAL" ? "bg-info text-dark" : ticket.Handler.TechUser.MaintenanceTeam == "GENERAL" ? "bg-warning text-dark" : "bg-primary") ms-1" style="font-size: 0.65rem;">
+                                                    @(ticket.Handler.TechUser.MaintenanceTeam ?? "IT")
+                                                </span>
+                                            }
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-danger bg-opacity-10 text-danger">Unassigned</span>
+                                    }
                                 }
                             </td>
                             <td>
@@ -233,3 +277,26 @@
         </div>
     </div>
 </div>
+
+@section Scripts {
+<script>
+    let filterTimer;
+    function debouncedFilterSubmit() {
+        clearTimeout(filterTimer);
+        filterTimer = setTimeout(() => {
+            const form = document.getElementById('ticketFilterForm');
+            if (form) form.submit();
+        }, 400);
+    }
+
+    document.addEventListener("DOMContentLoaded", function () {
+        const searchInput = document.getElementById('ticketSearchInput');
+        if (searchInput && searchInput.value) {
+            searchInput.focus();
+            const val = searchInput.value;
+            searchInput.value = '';
+            searchInput.value = val;
+        }
+    });
+</script>
+}

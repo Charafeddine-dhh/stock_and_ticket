@@ -1,5 +1,6 @@
 @inject StockPortal.Services.ICurrentUserService CurrentUser
 @inject StockPortal.Data.StockDbContext DbContext
+@inject StockPortal.Services.INotificationService NotificationService
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -209,11 +210,50 @@
         @{
             int openTicketsCount = 0;
             int overdueMaintCount = 0;
+            int unreadNotifsCount = 0;
             try
             {
-                openTicketsCount = DbContext.Tickets.Count(t => t.StatusId == 1 || t.StatusId == 2);
                 var today = DateTime.Now.Date;
+                var ticketsQuery = DbContext.Tickets.Where(t => t.StatusId == 1 || t.StatusId == 2);
+
+                if (CurrentUser.IsMaintenance())
+                {
+                    var myTeam = CurrentUser.GetMaintenanceTeam();
+                    if (!string.IsNullOrWhiteSpace(myTeam))
+                    {
+                        ticketsQuery = ticketsQuery.Where(t => t.TargetTeam == myTeam);
+                    }
+                }
+                else if (CurrentUser.IsEndUser())
+                {
+                    var userObj = CurrentUser.GetCurrentUser();
+                    if (userObj?.DepartmentId != null)
+                    {
+                        ticketsQuery = ticketsQuery.Where(t => t.OpenedByUser != null && t.OpenedByUser.DepartmentId == userObj.DepartmentId);
+                    }
+                    else
+                    {
+                        var uid = CurrentUser.GetUserId();
+                        ticketsQuery = ticketsQuery.Where(t => t.OpenedBy == uid || t.OnBehalfOf == uid);
+                    }
+                }
+                else if (CurrentUser.IsAdmin())
+                {
+                    var myTeam = CurrentUser.GetMaintenanceTeam();
+                    if (!string.IsNullOrWhiteSpace(myTeam))
+                    {
+                        ticketsQuery = ticketsQuery.Where(t => t.TargetTeam == myTeam);
+                    }
+                }
+
+                openTicketsCount = ticketsQuery.Count();
                 overdueMaintCount = DbContext.Assets.Count(a => a.NeedsPeriodic == true && a.NextPeriodic.HasValue && a.NextPeriodic.Value < today);
+
+                int currentUid = CurrentUser.GetUserId();
+                if (currentUid > 0)
+                {
+                    unreadNotifsCount = DbContext.Notifications.Count(n => n.UserId == currentUid && !n.IsRead);
+                }
             }
             catch {}
         }
@@ -225,6 +265,16 @@
                     <a href="@Url.Action("Index", "Home")" class="nav-link @(ViewContext.RouteData.Values["Controller"]?.ToString() == "Home" ? "active" : "")">
                         <i class="fa-solid fa-chart-pie"></i>
                         <span>Dashboard</span>
+                    </a>
+                </li>
+                <li>
+                    <a href="@Url.Action("Index", "Notifications")" class="nav-link @(ViewContext.RouteData.Values["Controller"]?.ToString() == "Notifications" ? "active" : "")">
+                        <i class="fa-solid fa-bell"></i>
+                        <span class="flex-grow-1">Notifications</span>
+                        @if (unreadNotifsCount > 0)
+                        {
+                            <span class="badge bg-danger rounded-pill" style="font-size: 0.7rem;">@unreadNotifsCount</span>
+                        }
                     </a>
                 </li>
                 <li>
@@ -278,6 +328,16 @@
             {
                 <li class="nav-category">Engineering Queue</li>
                 <li>
+                    <a href="@Url.Action("Index", "Notifications")" class="nav-link @(ViewContext.RouteData.Values["Controller"]?.ToString() == "Notifications" ? "active" : "")">
+                        <i class="fa-solid fa-bell text-warning"></i>
+                        <span class="flex-grow-1">Notifications</span>
+                        @if (unreadNotifsCount > 0)
+                        {
+                            <span class="badge bg-danger rounded-pill" style="font-size: 0.7rem;">@unreadNotifsCount</span>
+                        }
+                    </a>
+                </li>
+                <li>
                     <a href="@Url.Action("Index", "Tickets")" class="nav-link @(ViewContext.RouteData.Values["Controller"]?.ToString() == "Tickets" ? "active" : "")">
                         <i class="fa-solid fa-users-gear text-info"></i>
                         <span class="flex-grow-1">@CurrentUser.GetMaintenanceTeam() Queue</span>
@@ -322,6 +382,16 @@
             {
                 <li class="nav-category">My Workspace</li>
                 <li>
+                    <a href="@Url.Action("Index", "Notifications")" class="nav-link @(ViewContext.RouteData.Values["Controller"]?.ToString() == "Notifications" ? "active" : "")">
+                        <i class="fa-solid fa-bell text-warning"></i>
+                        <span class="flex-grow-1">Notifications</span>
+                        @if (unreadNotifsCount > 0)
+                        {
+                            <span class="badge bg-danger rounded-pill" style="font-size: 0.7rem;">@unreadNotifsCount</span>
+                        }
+                    </a>
+                </li>
+                <li>
                     <a href="@Url.Action("Index", "Assets")" class="nav-link @(ViewContext.RouteData.Values["Controller"]?.ToString() == "Assets" ? "active" : "")">
                         <i class="fa-solid fa-laptop text-primary"></i>
                         <span>My Equipment</span>
@@ -360,7 +430,7 @@
                     <div class="text-white text-truncate fw-semibold" style="font-size: 0.85rem;">@CurrentUser.GetFullName()</div>
                     <div class="text-info text-truncate d-flex align-items-center gap-1" style="font-size: 0.72rem;">
                         <i class="fa-solid fa-shield-halved" style="font-size: 0.65rem;"></i>
-                        <span>@CurrentUser.GetRole() @(CurrentUser.IsMaintenance() ? $"({CurrentUser.GetMaintenanceTeam()})" : "")</span>
+                        <span>@(CurrentUser.IsMaintenance() ? $"MAINTENANCE ({CurrentUser.GetMaintenanceTeam() ?? "GENERAL"})" : CurrentUser.GetRole())</span>
                     </div>
                 </div>
             </div>
@@ -375,6 +445,17 @@
                 <h5 class="mb-0 fw-bold">@ViewData["Title"]</h5>
             </div>
             <div class="d-flex align-items-center gap-3">
+                <!-- Notifications Bell Icon -->
+                <a href="@Url.Action("Index", "Notifications")" id="navNotificationsLink" class="btn btn-sm btn-light border position-relative" title="Notifications">
+                    <i class="fa-solid fa-bell text-secondary"></i>
+                    @if (unreadNotifsCount > 0)
+                    {
+                        <span id="navUnreadBadge" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" style="font-size: 0.65rem;">
+                            @unreadNotifsCount
+                        </span>
+                    }
+                </a>
+
                 <!-- Domain User Pill -->
                 <div class="dropdown">
                     <button class="btn btn-sm btn-light border dropdown-toggle d-flex align-items-center gap-2" type="button" data-bs-toggle="dropdown">
@@ -388,10 +469,10 @@
                             <div class="px-3 py-1 text-muted small">
                                 <div>Domain: <strong>@Environment.UserDomainName</strong></div>
                                 <div>User: <strong>@CurrentUser.GetDomainUser()</strong></div>
-                                <div>Role: <strong>@CurrentUser.GetRole()</strong></div>
+                                <div>Role: <strong>@(CurrentUser.IsMaintenance() ? $"MAINTENANCE ({CurrentUser.GetMaintenanceTeam() ?? "GENERAL"})" : CurrentUser.GetRole())</strong></div>
                                 @if (CurrentUser.IsMaintenance())
                                 {
-                                    <div>Team: <strong>@CurrentUser.GetMaintenanceTeam()</strong></div>
+                                    <div>Team: <strong>@(CurrentUser.GetMaintenanceTeam() ?? "GENERAL")</strong></div>
                                 }
                             </div>
                         </li>
@@ -415,6 +496,25 @@
 
         <!-- Flash Messages -->
         <div class="container-fluid px-4 pt-3">
+            <!-- Desktop Notification Permission Banner -->
+            <div id="desktopNotifBanner" class="alert alert-primary alert-dismissible fade show align-items-center justify-content-between p-3 mb-3 shadow-sm border-0" role="alert" style="display: none !important;">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="bg-primary text-white rounded-circle p-2 d-flex align-items-center justify-content-center" style="width: 36px; height: 36px;">
+                        <i class="fa-solid fa-bell fs-6"></i>
+                    </div>
+                    <div>
+                        <strong class="d-block text-dark" style="font-size: 0.9rem;">Enable Desktop Notifications</strong>
+                        <span class="text-secondary small">Receive instant popup alerts on your screen when tickets are opened, updated, or replied to.</span>
+                    </div>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <button id="btnEnableDesktopNotifs" type="button" class="btn btn-sm btn-primary px-3 fw-semibold">
+                        <i class="fa-solid fa-bell me-1"></i> Enable Popups
+                    </button>
+                    <button type="button" class="btn-close ms-2" data-bs-dismiss="alert" aria-label="Close" id="btnDismissNotifBanner"></button>
+                </div>
+            </div>
+
             @if (TempData["SuccessMessage"] != null)
             {
                 <div class="alert alert-success alert-dismissible fade show d-flex align-items-center gap-2" role="alert">
@@ -449,8 +549,226 @@
         </footer>
     </div>
 
+    <!-- Toast Notification Container for Floating Alerts -->
+    <div aria-live="polite" aria-atomic="true" class="position-fixed top-0 end-0 p-3" style="z-index: 99999; pointer-events: none;">
+        <div id="toastNotificationContainer" class="toast-container" style="pointer-events: auto;"></div>
+    </div>
+
     <!-- Scripts -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        (function () {
+            const displayedNotifKey = "displayed_popup_notif_ids";
+            let displayedIds = new Set();
+            try {
+                const stored = sessionStorage.getItem(displayedNotifKey);
+                if (stored) {
+                    JSON.parse(stored).forEach(id => displayedIds.add(id));
+                }
+            } catch (e) { }
+
+            // Web Audio API notification chime with suspended state recovery
+            function playNotificationChime() {
+                try {
+                    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+                    if (!AudioContextClass) return;
+                    const ctx = new AudioContextClass();
+                    if (ctx.state === "suspended") {
+                        ctx.resume().catch(() => {});
+                    }
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+                    osc.type = "sine";
+                    osc.frequency.setValueAtTime(587.33, ctx.currentTime);
+                    osc.frequency.setValueAtTime(880, ctx.currentTime + 0.1);
+                    gain.gain.setValueAtTime(0.18, ctx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.35);
+                    osc.connect(gain);
+                    gain.connect(ctx.destination);
+                    osc.start();
+                    osc.stop(ctx.currentTime + 0.35);
+                } catch (e) { }
+            }
+
+            // Desktop notification permission prompt banner
+            function initDesktopNotificationBanner() {
+                if (!("Notification" in window)) return;
+
+                const banner = document.getElementById("desktopNotifBanner");
+                const btnEnable = document.getElementById("btnEnableDesktopNotifs");
+                const dismissed = sessionStorage.getItem("desktop_notif_banner_dismissed");
+
+                if (Notification.permission === "default" && !dismissed && banner) {
+                    banner.style.setProperty("display", "flex", "important");
+                }
+
+                if (btnEnable) {
+                    btnEnable.addEventListener("click", async function () {
+                        try {
+                            const permission = await Notification.requestPermission();
+                            if (banner) {
+                                banner.style.setProperty("display", "none", "important");
+                            }
+                            if (permission === "granted") {
+                                playNotificationChime();
+                                showDesktopNotification({
+                                    id: 0,
+                                    title: "Notifications Enabled!",
+                                    message: "You will now receive desktop popup alerts when tickets are created, updated, or replied to.",
+                                    linkUrl: "/Notifications"
+                                });
+                            }
+                        } catch (err) {
+                            console.error("Error requesting notification permission:", err);
+                        }
+                    });
+                }
+
+                const btnDismiss = document.getElementById("btnDismissNotifBanner");
+                if (btnDismiss) {
+                    btnDismiss.addEventListener("click", function () {
+                        sessionStorage.setItem("desktop_notif_banner_dismissed", "true");
+                    });
+                }
+            }
+
+            // Native Browser Desktop Popup (OS level)
+            function showDesktopNotification(item) {
+                if (!("Notification" in window) || Notification.permission !== "granted") {
+                    return;
+                }
+                try {
+                    const title = item.title || "Ticket Notification";
+                    const options = {
+                        body: item.message || "",
+                        icon: "/favicon.ico",
+                        badge: "/favicon.ico",
+                        tag: "notif_" + item.id,
+                        renotify: true
+                    };
+                    const notification = new Notification(title, options);
+                    notification.onclick = function (e) {
+                        e.preventDefault();
+                        window.focus();
+                        if (item.linkUrl) {
+                            window.location.href = item.linkUrl;
+                        }
+                        notification.close();
+                    };
+                } catch (e) {
+                    console.error("Desktop notification popup error:", e);
+                }
+            }
+
+            // In-page Floating Toast Notification
+            function showNotificationToast(item) {
+                const container = document.getElementById("toastNotificationContainer");
+                if (!container) return;
+
+                const toastId = "notif_toast_" + item.id;
+                if (document.getElementById(toastId)) return;
+
+                const iconClass = item.type === "TicketMessage" 
+                    ? "fa-solid fa-comments text-info" 
+                    : item.type === "TicketStatus" 
+                    ? "fa-solid fa-circle-check text-warning" 
+                    : "fa-solid fa-ticket text-primary";
+
+                const toastEl = document.createElement("div");
+                toastEl.id = toastId;
+                toastEl.className = "toast show shadow-lg border border-primary-subtle mb-2";
+                toastEl.setAttribute("role", "alert");
+                toastEl.setAttribute("aria-live", "assertive");
+                toastEl.setAttribute("aria-atomic", "true");
+                toastEl.style.backgroundColor = "#ffffff";
+                toastEl.style.minWidth = "320px";
+                toastEl.style.boxShadow = "0 0.5rem 1.2rem rgba(0,0,0,0.2)";
+
+                toastEl.innerHTML = `
+                    <div class="toast-header bg-white border-bottom-0 pb-1">
+                        <i class="${iconClass} me-2 fs-6"></i>
+                        <strong class="me-auto text-dark" style="font-size: 0.85rem;">${item.title || "Notification"}</strong>
+                        <small class="text-muted" style="font-size: 0.72rem;">${item.timeAgo || "Just now"}</small>
+                        <button type="button" class="btn-close ms-2" data-bs-dismiss="toast" aria-label="Close"></button>
+                    </div>
+                    <div class="toast-body pt-1 pb-2">
+                        <div class="text-secondary small mb-2" style="font-size: 0.82rem; white-space: pre-wrap;">${item.message}</div>
+                        <div class="d-flex justify-content-end gap-2">
+                            <a href="${item.linkUrl || '/Notifications'}" class="btn btn-primary btn-sm py-0 px-2" style="font-size: 0.75rem;">
+                                <i class="fa-solid fa-arrow-up-right-from-square me-1"></i> Open Ticket
+                            </a>
+                        </div>
+                    </div>
+                `;
+
+                container.appendChild(toastEl);
+                try {
+                    const bsToast = new bootstrap.Toast(toastEl, { delay: 9000, autohide: true });
+                    bsToast.show();
+                } catch (e) {
+                    toastEl.style.display = "block";
+                    toastEl.style.opacity = "1";
+                }
+            }
+
+            async function checkUnreadNotifications() {
+                try {
+                    const res = await fetch("/Notifications/GetLatestUnread", {
+                        headers: { "X-Requested-With": "XMLHttpRequest" }
+                    });
+                    if (!res.ok) return;
+                    const data = await res.json();
+
+                    // Update navbar badge dynamically
+                    const badge = document.getElementById("navUnreadBadge");
+                    const navLink = document.getElementById("navNotificationsLink");
+                    if (data.count > 0) {
+                        if (badge) {
+                            badge.textContent = data.count;
+                            badge.style.display = "inline-block";
+                        } else if (navLink) {
+                            const newBadge = document.createElement("span");
+                            newBadge.id = "navUnreadBadge";
+                            newBadge.className = "position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger";
+                            newBadge.style.fontSize = "0.65rem";
+                            newBadge.textContent = data.count;
+                            navLink.appendChild(newBadge);
+                        }
+                    } else if (badge) {
+                        badge.style.display = "none";
+                    }
+
+                    if (Array.isArray(data.notifications)) {
+                        let hasNew = false;
+                        data.notifications.forEach(item => {
+                            if (!displayedIds.has(item.id)) {
+                                displayedIds.add(item.id);
+                                hasNew = true;
+
+                                // 1. Show in-page toast popup
+                                showNotificationToast(item);
+
+                                // 2. Show native browser desktop popup
+                                showDesktopNotification(item);
+                            }
+                        });
+                        if (hasNew) {
+                            playNotificationChime();
+                            try {
+                                sessionStorage.setItem(displayedNotifKey, JSON.stringify(Array.from(displayedIds)));
+                            } catch (e) { }
+                        }
+                    }
+                } catch (e) { }
+            }
+
+            document.addEventListener("DOMContentLoaded", function () {
+                initDesktopNotificationBanner();
+                checkUnreadNotifications();
+                setInterval(checkUnreadNotifications, 8000);
+            });
+        })();
+    </script>
     @await RenderSectionAsync("Scripts", required: false)
 </body>
 </html>

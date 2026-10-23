@@ -17,7 +17,6 @@
                     @Html.AntiForgeryToken()
                     <div asp-validation-summary="ModelOnly" class="text-danger mb-3"></div>
                     <input type="hidden" asp-for="OpenedBy" value="@currentUserId" />
-
                     <!-- Hidden target team input submitted with the form -->
                     <input type="hidden" asp-for="TargetTeam" id="hiddenTargetTeam" value="IT" />
 
@@ -81,9 +80,9 @@
                             <div class="form-text small">Equipment details entered here will be logged directly into the technician's dispatch message.</div>
                         </div>
 
-                        <!-- Target Maintenance Team (Locked & Dynamic) -->
+                        <!-- Target Maintenance Team (Relocked to Equipment Department Scope) -->
                         <div class="col-md-4">
-                            <label class="form-label fw-semibold">Target Maintenance Team</label>
+                            <label class="form-label fw-semibold">Responsible Department</label>
                             
                             <!-- Container when an asset is selected: LOCKED from editing -->
                             <div id="lockedTeamContainer">
@@ -94,11 +93,11 @@
                                     <input type="text" id="lockedTeamText" class="form-control bg-light fw-bold text-dark border-start-0" readonly value="IT Maintenance" />
                                 </div>
                                 <div class="form-text small text-success">
-                                    <i class="fa-solid fa-circle-check me-1"></i> Locked to asset's maintenance scope.
+                                    <i class="fa-solid fa-circle-check me-1"></i> Department locked to equipment scope.
                                 </div>
                             </div>
 
-                            <!-- Container when no asset is selected: General selector -->
+                            <!-- Container when no asset is selected: General request department selector -->
                             <div id="selectableTeamContainer" style="display: none;">
                                 <select id="selectTargetTeam" class="form-select">
                                     <option value="IT" selected>IT Maintenance</option>
@@ -106,7 +105,7 @@
                                     <option value="GENERAL">General Facility Maintenance</option>
                                 </select>
                                 <div class="form-text small text-muted">
-                                    <i class="fa-solid fa-circle-info me-1"></i> Destination team for general request.
+                                    <i class="fa-solid fa-circle-info me-1"></i> Department handling general request.
                                 </div>
                             </div>
                         </div>
@@ -132,16 +131,25 @@
                             <div class="form-text small text-muted">Urgency of service response.</div>
                         </div>
 
-                        @if (CurrentUser.IsAdmin() || CurrentUser.IsMaintenance())
-                        {
-                            <!-- Technician Assignment (Only visible for Admin/Maintenance) -->
-                            <div class="col-md-12">
-                                <label name="assignedTechId" class="form-label fw-semibold">Assign Technician Immediately (Optional)</label>
-                                <select name="assignedTechId" class="form-select" asp-items="ViewBag.Technicians">
-                                    <option value="">-- Leave in Unassigned Queue --</option>
-                                </select>
+                        <!-- Specialist / Technician in Responsible Department: Assignable by End User & Staff -->
+                        <div class="col-md-12">
+                            <label class="form-label fw-semibold">
+                                <i class="fa-solid fa-user-gear text-primary me-1"></i> Assign to Specialist in Responsible Department (Optional)
+                            </label>
+                            <select name="assignedTechId" id="assignedTechSelect" class="form-select">
+                                <option value="">-- Unassigned (Department Queue) --</option>
+                                @if (ViewBag.TechniciansList != null)
+                                {
+                                    foreach (var tech in ViewBag.TechniciansList)
+                                    {
+                                        <option value="@tech.Id" data-team="@tech.MaintenanceTeam">@tech.FullName (@tech.RoleDisplay)</option>
+                                    }
+                                }
+                            </select>
+                            <div class="form-text small text-muted" id="techFilterNotice">
+                                <i class="fa-solid fa-circle-info me-1"></i> Showing specialists for the responsible department.
                             </div>
-                        }
+                        </div>
 
                         <!-- Issue Description & Message -->
                         <div class="col-12">
@@ -178,6 +186,8 @@
         const selectableTeamContainer = document.getElementById("selectableTeamContainer");
         const selectTargetTeam = document.getElementById("selectTargetTeam");
         const ticketTypeSelect = document.getElementById("ticketTypeSelect");
+        const assignedTechSelect = document.getElementById("assignedTechSelect");
+        const techFilterNotice = document.getElementById("techFilterNotice");
 
         // Rich issue categories organized by maintenance team
         const categoriesByTeam = {
@@ -227,6 +237,35 @@
             }
         }
 
+        function filterTechniciansByTeam(team) {
+            if (!assignedTechSelect) return;
+            const normalizedTeam = (team || "IT").toUpperCase();
+            let visibleCount = 0;
+            const options = assignedTechSelect.options;
+
+            for (let i = 0; i < options.length; i++) {
+                const opt = options[i];
+                const techTeam = opt.getAttribute("data-team");
+                if (!techTeam || opt.value === "") {
+                    opt.style.display = "";
+                    continue;
+                }
+                if (techTeam.toUpperCase() === normalizedTeam) {
+                    opt.style.display = "";
+                    visibleCount++;
+                } else {
+                    opt.style.display = "none";
+                    if (opt.selected) {
+                        assignedTechSelect.value = "";
+                    }
+                }
+            }
+
+            if (techFilterNotice) {
+                techFilterNotice.innerHTML = `<i class="fa-solid fa-circle-check text-success me-1"></i> Showing specialists for <strong>${getTeamFriendlyName(normalizedTeam)}</strong> (${visibleCount} available).`;
+            }
+        }
+
         function populateCategories(team) {
             const normalizedTeam = (team || "IT").toUpperCase();
             const list = categoriesByTeam[normalizedTeam] || categoriesByTeam["IT"];
@@ -261,21 +300,19 @@
             }
 
             if (hasAsset) {
-                // Asset is selected: LOCK target team to asset's team
-                lockedTeamContainer.style.display = "block";
-                selectableTeamContainer.style.display = "none";
-                lockedTeamText.value = getTeamFriendlyName(activeTeam);
-                hiddenTargetTeam.value = activeTeam;
+                if (lockedTeamContainer) lockedTeamContainer.style.display = "block";
+                if (selectableTeamContainer) selectableTeamContainer.style.display = "none";
+                if (lockedTeamText) lockedTeamText.value = getTeamFriendlyName(activeTeam);
+                if (hiddenTargetTeam) hiddenTargetTeam.value = activeTeam;
             } else {
-                // No asset selected (General Request or On Behalf): Allow user to pick target team
-                lockedTeamContainer.style.display = "none";
-                selectableTeamContainer.style.display = "block";
-                activeTeam = (selectTargetTeam.value || "IT").toUpperCase();
-                hiddenTargetTeam.value = activeTeam;
+                if (lockedTeamContainer) lockedTeamContainer.style.display = "none";
+                if (selectableTeamContainer) selectableTeamContainer.style.display = "block";
+                activeTeam = (selectTargetTeam && selectTargetTeam.value || "IT").toUpperCase();
+                if (hiddenTargetTeam) hiddenTargetTeam.value = activeTeam;
             }
 
-            // Dynamically update categories to match team
             populateCategories(activeTeam);
+            filterTechniciansByTeam(activeTeam);
         }
 
         function updateAssetMode() {
@@ -305,8 +342,9 @@
 
         if (selectTargetTeam) {
             selectTargetTeam.addEventListener("change", function () {
-                hiddenTargetTeam.value = selectTargetTeam.value.toUpperCase();
+                if (hiddenTargetTeam) hiddenTargetTeam.value = selectTargetTeam.value.toUpperCase();
                 populateCategories(selectTargetTeam.value);
+                filterTechniciansByTeam(selectTargetTeam.value);
             });
         }
 

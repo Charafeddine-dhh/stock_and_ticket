@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using Microsoft.EntityFrameworkCore;
 using StockPortal.Models;
 
 namespace StockPortal.Data
@@ -9,6 +10,44 @@ namespace StockPortal.Data
         public static void Initialize(StockDbContext context)
         {
             context.Database.EnsureCreated();
+
+            // Ensure notifications table exists
+            try
+            {
+                var isSqlite = context.Database.ProviderName?.Contains("Sqlite") == true;
+                if (isSqlite)
+                {
+                    context.Database.ExecuteSqlRaw(@"
+                        CREATE TABLE IF NOT EXISTS notifications (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            userID INTEGER NOT NULL,
+                            ticketID INTEGER NULL,
+                            title TEXT NOT NULL,
+                            message TEXT NOT NULL,
+                            type TEXT NOT NULL,
+                            linkUrl TEXT NULL,
+                            isRead INTEGER NOT NULL DEFAULT 0,
+                            createdAt TEXT NOT NULL
+                        );");
+                }
+                else
+                {
+                    context.Database.ExecuteSqlRaw(@"
+                        CREATE TABLE IF NOT EXISTS `notifications` (
+                            `id` int NOT NULL AUTO_INCREMENT,
+                            `userID` int NOT NULL,
+                            `ticketID` int NULL,
+                            `title` varchar(255) NOT NULL,
+                            `message` varchar(1024) NOT NULL,
+                            `type` varchar(50) NOT NULL,
+                            `linkUrl` varchar(255) NULL,
+                            `isRead` tinyint(1) NOT NULL DEFAULT 0,
+                            `createdAt` datetime NOT NULL,
+                            PRIMARY KEY (`id`)
+                        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
+                }
+            }
+            catch {}
 
             // Ensure Ticket Statuses
             if (!context.TicketStatuses.Any())

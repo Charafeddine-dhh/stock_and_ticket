@@ -22,6 +22,7 @@ namespace StockPortal.Data
         public DbSet<TicketStatus> TicketStatuses { get; set; } = null!;
         public DbSet<User> Users { get; set; } = null!;
         public DbSet<DeviceForm> DeviceForms { get; set; } = null!;
+        public DbSet<Notification> Notifications { get; set; } = null!;
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -165,6 +166,20 @@ namespace StockPortal.Data
                     .WithMany()
                     .HasForeignKey(m => m.SupplierId)
                     .OnDelete(DeleteBehavior.SetNull);
+            });
+
+            // Notification relationships
+            modelBuilder.Entity<Notification>(entity =>
+            {
+                entity.HasOne(n => n.User)
+                    .WithMany()
+                    .HasForeignKey(n => n.UserId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(n => n.Ticket)
+                    .WithMany()
+                    .HasForeignKey(n => n.TicketId)
+                    .OnDelete(DeleteBehavior.Cascade);
             });
         }
     }

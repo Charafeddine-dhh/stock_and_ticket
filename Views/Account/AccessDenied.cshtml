@@ -115,7 +115,7 @@
             </div>
             <div class="px-4 pb-4">
                 <div class="alert alert-warning border-0 small mb-4">
-                    <div><strong>Logged In Identity:</strong> @(currentUser?.FullName ?? "Staff Member") (@(currentUser?.Role ?? "END_USER"))</div>
+                    <div><strong>Logged In Identity:</strong> @(currentUser?.FullName ?? "Staff Member") (@(currentUser?.RoleDisplay ?? "END_USER"))</div>
                     @if (currentUser != null && !string.IsNullOrWhiteSpace(currentUser.MaintenanceTeam))
                     {
                         <div><strong>Assigned Team:</strong> @currentUser.MaintenanceTeam Maintenance</div>

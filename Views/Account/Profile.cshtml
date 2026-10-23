@@ -22,7 +22,7 @@
                     @(Model.FullName != null ? Model.FullName.Substring(0, 1) : "U")
                 </div>
                 <h5 class="fw-bold mb-1">@Model.FullName</h5>
-                <div class="badge bg-primary bg-opacity-10 text-primary mb-2">@Model.Role</div>
+                <div class="badge bg-primary bg-opacity-10 text-primary mb-2">@Model.RoleDisplay</div>
                 <div class="small text-muted mb-3">@(Model.Department?.Name ?? "General Staff")</div>
 
                 <div class="p-2 bg-light rounded text-start small font-monospace mb-3">
@@ -61,7 +61,7 @@
                             <button type="submit" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center small py-2 w-100 border-0 text-start @(u.Id == Model.Id ? "active text-white" : "")">
                                 <div>
                                     <div class="fw-semibold">@u.FullName</div>
-                                    <div class="@(u.Id == Model.Id ? "text-light" : "text-muted")" style="font-size: 0.72rem;">@u.Role &bull; @u.DomainUser</div>
+                                    <div class="@(u.Id == Model.Id ? "text-light" : "text-muted")" style="font-size: 0.72rem;">@u.RoleDisplay &bull; @u.DomainUser</div>
                                 </div>
                                 @if (u.Id == Model.Id)
                                 {

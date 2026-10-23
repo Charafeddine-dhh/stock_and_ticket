@@ -88,7 +88,7 @@
                                     <div class="d-flex justify-content-between align-items-center mb-1">
                                         <div class="fw-bold text-dark">
                                             @(msg.User?.FullName ?? "Staff Member")
-                                            <span class="text-muted fw-normal small">(@(msg.User?.Role ?? "Staff"))</span>
+                                            <span class="text-muted fw-normal small">(@(msg.User?.RoleDisplay ?? "Staff"))</span>
                                         </div>
                                         <small class="text-muted">@msg.TimeStamp?.ToString("MMM dd, yyyy HH:mm")</small>
                                     </div>
@@ -119,20 +119,8 @@
                             <div class="row g-2 align-items-end">
                                 <div class="col-md-4">
                                     <label class="form-label small fw-semibold text-muted">Post As</label>
-                                    @if (CurrentUser.IsAdmin() || CurrentUser.IsMaintenance())
-                                    {
-                                        <select name="userId" class="form-select form-select-sm" required>
-                                            @foreach (var tech in Model.Technicians)
-                                            {
-                                                <option value="@tech.Id" selected="@(tech.Id == CurrentUser.GetUserId())">@tech.FullName (@tech.Role)</option>
-                                            }
-                                        </select>
-                                    }
-                                    else
-                                    {
-                                        <input type="hidden" name="userId" value="@CurrentUser.GetUserId()" />
-                                        <input type="text" class="form-control form-control-sm bg-light" value="@CurrentUser.GetFullName()" readonly />
-                                    }
+                                    <input type="hidden" name="userId" value="@CurrentUser.GetUserId()" />
+                                    <input type="text" class="form-control form-control-sm bg-light fw-semibold text-dark" value="@CurrentUser.GetFullName() (@(CurrentUser.IsMaintenance() ? $"MAINTENANCE ({CurrentUser.GetMaintenanceTeam() ?? "GENERAL"})" : CurrentUser.GetRole()))" readonly />
                                 </div>
                                 <div class="col-md-8">
                                     <label class="form-label small fw-semibold text-muted">Add Note / Progress Update</label>
@@ -196,9 +184,9 @@
                 <h6 class="mb-0 fw-bold"><i class="fa-solid fa-sliders text-primary me-2"></i> Ticket Details & Management</h6>
             </div>
             <div class="card-body">
-                <!-- Target Team -->
+                <!-- Target Team: Relocked to equipment scope -->
                 <div class="mb-3">
-                    <label class="form-label small fw-semibold text-muted">Assigned Maintenance Team</label>
+                    <label class="form-label small fw-semibold text-muted">Responsible Department</label>
                     <div>
                         <span class="badge bg-primary fs-6"><i class="fa-solid fa-users-gear me-1"></i> @ticket.TargetTeam Team</span>
                     </div>
@@ -221,23 +209,6 @@
                             <button type="submit" class="btn btn-outline-primary">Update</button>
                         </div>
                     </form>
-
-                    <!-- Technician Assignment Form -->
-                    <form asp-action="AssignTechnician" method="post" class="mb-3">
-                        @Html.AntiForgeryToken()
-                        <input type="hidden" name="ticketId" value="@ticket.Id" />
-                        <label class="form-label small fw-semibold text-muted">Assigned Technician</label>
-                        <div class="input-group">
-                            <select name="techUserId" class="form-select">
-                                <option value="">-- Unassigned --</option>
-                                @foreach (var tech in Model.Technicians)
-                                {
-                                    <option value="@tech.Id" selected="@(tech.Id == ticket.Handler?.TechUserId)">@tech.FullName (@tech.Role)</option>
-                                }
-                            </select>
-                            <button type="submit" class="btn btn-outline-primary">Assign</button>
-                        </div>
-                    </form>
                 }
                 else
                 {
@@ -254,11 +225,43 @@
                             }
                         </div>
                     </div>
+                }
+
+                <!-- Specialist / Technician Assignment Form (Available to Requester, Maintenance, and Admin) -->
+                @if (!isClosed && (canManage || ticket.OpenedBy == CurrentUser.GetUserId() || ticket.OnBehalfOf == CurrentUser.GetUserId()))
+                {
+                    <form asp-action="AssignTechnician" method="post" class="mb-3">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="ticketId" value="@ticket.Id" />
+                        <label class="form-label small fw-semibold text-muted">
+                            <i class="fa-solid fa-user-gear text-primary me-1"></i> Assigned Specialist (@ticket.TargetTeam Department)
+                        </label>
+                        <div class="input-group">
+                            <select name="techUserId" class="form-select">
+                                <option value="">-- Unassigned (Department Queue) --</option>
+                                @foreach (var tech in Model.Technicians.Where(t => t.Role == "ADMIN" || t.MaintenanceTeam == ticket.TargetTeam))
+                                {
+                                    <option value="@tech.Id" selected="@(tech.Id == ticket.Handler?.TechUserId)">
+                                        @tech.FullName (@tech.RoleDisplay)
+                                    </option>
+                                }
+                            </select>
+                            <button type="submit" class="btn btn-outline-primary">Assign</button>
+                        </div>
+                        <div class="form-text small text-muted">Assign or reassign to a specialist in the responsible @ticket.TargetTeam department.</div>
+                    </form>
+                }
+                else
+                {
                     <div class="mb-3">
-                        <label class="form-label small fw-semibold text-muted">Assigned Technician</label>
+                        <label class="form-label small fw-semibold text-muted">Assigned Specialist</label>
                         <div class="fw-semibold text-dark">
                             <i class="fa-solid fa-user-gear text-secondary me-1"></i>
                             @(ticket.Handler?.TechUser?.FullName ?? "Unassigned")
+                            @if (ticket.Handler?.TechUser != null)
+                            {
+                                <span class="text-muted small">(@ticket.Handler.TechUser.RoleDisplay)</span>
+                            }
                         </div>
                     </div>
                 }
@@ -311,7 +314,7 @@
             </div>
             <div class="card-body">
                 <div class="fw-bold text-dark fs-6">@(ticket.OpenedByUser?.FullName ?? "Unknown User")</div>
-                <div class="small text-muted mb-2">@(ticket.OpenedByUser?.Role ?? "Staff") &bull; @(ticket.OpenedByUser?.Department?.Name ?? "General")</div>
+                <div class="small text-muted mb-2">@(ticket.OpenedByUser?.RoleDisplay ?? "Staff") &bull; @(ticket.OpenedByUser?.Department?.Name ?? "General")</div>
 
                 @if (ticket.OnBehalfOfUser != null && ticket.OnBehalfOf != ticket.OpenedBy)
                 {
@@ -354,7 +357,7 @@
                             <select name="technicianId" class="form-select" required>
                                 @foreach (var tech in Model.Technicians)
                                 {
-                                    <option value="@tech.Id" selected="@(tech.Id == (ticket.Handler?.TechUserId ?? 1))">@tech.FullName (@tech.Role)</option>
+                                    <option value="@tech.Id" selected="@(tech.Id == (ticket.Handler?.TechUserId ?? 1))">@tech.FullName (@tech.RoleDisplay)</option>
                                 }
                             </select>
                         </div>

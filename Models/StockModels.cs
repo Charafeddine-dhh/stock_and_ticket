@@ -162,6 +162,21 @@ namespace StockPortal.Models
         [Column("isActive")]
         public bool? IsActive { get; set; } = true;
 
+        [NotMapped]
+        public string RoleDisplay
+        {
+            get
+            {
+                if (string.Equals(Role, SystemRoles.Maintenance, StringComparison.OrdinalIgnoreCase) ||
+                    (Role != null && Role.IndexOf("MAINTENANCE", StringComparison.OrdinalIgnoreCase) >= 0))
+                {
+                    var team = !string.IsNullOrWhiteSpace(MaintenanceTeam) ? MaintenanceTeam.ToUpperInvariant() : "GENERAL";
+                    return $"MAINTENANCE ({team})";
+                }
+                return Role ?? SystemRoles.EndUser;
+            }
+        }
+
         public virtual ICollection<Asset> CustodyAssets { get; set; } = new List<Asset>();
         public virtual ICollection<Ticket> OpenedTickets { get; set; } = new List<Ticket>();
     }
@@ -385,7 +400,7 @@ namespace StockPortal.Models
         [Column("target_team")]
         [StringLength(50)]
         [Display(Name = "Target Maintenance Team")]
-        public string TargetTeam { get; set; } = MaintenanceTeams.IT;
+        public string? TargetTeam { get; set; }
 
         [Column("resolution_details")]
         [StringLength(1024)]
@@ -562,5 +577,50 @@ namespace StockPortal.Models
         public List<string> Options { get; set; } = new List<string>();
         public bool Required { get; set; } = false;
         public string? Placeholder { get; set; }
+    }
+
+    [Table("notifications")]
+    public class Notification
+    {
+        [Key]
+        [Column("id")]
+        [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
+        public int Id { get; set; }
+
+        [Column("userID")]
+        public int UserId { get; set; }
+
+        [ForeignKey("UserId")]
+        public virtual User? User { get; set; }
+
+        [Column("ticketID")]
+        public int? TicketId { get; set; }
+
+        [ForeignKey("TicketId")]
+        public virtual Ticket? Ticket { get; set; }
+
+        [Column("title")]
+        [StringLength(255)]
+        [Required]
+        public string Title { get; set; } = string.Empty;
+
+        [Column("message")]
+        [StringLength(1024)]
+        [Required]
+        public string Message { get; set; } = string.Empty;
+
+        [Column("type")]
+        [StringLength(50)]
+        public string Type { get; set; } = "TicketUpdate"; // TicketOpened, MessageAdded, StatusChanged
+
+        [Column("linkUrl")]
+        [StringLength(255)]
+        public string? LinkUrl { get; set; }
+
+        [Column("isRead")]
+        public bool IsRead { get; set; } = false;
+
+        [Column("createdAt")]
+        public DateTime CreatedAt { get; set; } = DateTime.Now;
     }
 }

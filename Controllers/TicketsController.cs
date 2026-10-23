@@ -16,11 +16,13 @@ namespace StockPortal.Controllers
     {
         private readonly StockDbContext _context;
         private readonly ICurrentUserService _currentUserService;
+        private readonly INotificationService _notificationService;
 
-        public TicketsController(StockDbContext context, ICurrentUserService currentUserService)
+        public TicketsController(StockDbContext context, ICurrentUserService currentUserService, INotificationService notificationService)
         {
             _context = context;
             _currentUserService = currentUserService;
+            _notificationService = notificationService;
         }
 
         // GET: Tickets
@@ -51,9 +53,17 @@ namespace StockPortal.Controllers
             }
             // ADMIN has unrestricted access across all tickets
 
-            if (statusId.HasValue && statusId.Value > 0)
+            if (statusId.HasValue)
             {
-                query = query.Where(t => t.StatusId == statusId.Value);
+                if (statusId.Value == -1)
+                {
+                    // Not Closed tickets (Status != 5 and ClosedDT is null)
+                    query = query.Where(t => t.StatusId != 5 && t.ClosedDT == null);
+                }
+                else if (statusId.Value > 0)
+                {
+                    query = query.Where(t => t.StatusId == statusId.Value);
+                }
             }
 
             if (priority.HasValue && priority.Value > 0)
@@ -102,6 +112,10 @@ namespace StockPortal.Controllers
             ViewBag.SelectedFilter = filter;
 
             ViewBag.Statuses = await _context.TicketStatuses.ToListAsync();
+            ViewBag.AllTechnicians = await _context.Users
+                .Where(u => u.IsActive == true && (u.Role == SystemRoles.Maintenance || u.Role == SystemRoles.Admin))
+                .OrderBy(u => u.FullName)
+                .ToListAsync();
 
             var tickets = await query.OrderByDescending(t => t.OpenedDT).ToListAsync();
             return View(tickets);
@@ -183,15 +197,18 @@ namespace StockPortal.Controllers
                     ticket.AssetId = null;
                 }
 
-                // Automated ticket routing to asset's designated maintenance team
-                if (ticket.AssetId.HasValue)
+                // Target team routing: honor explicitly specified target team; fall back to asset's team or IT
+                if (string.IsNullOrWhiteSpace(ticket.TargetTeam))
                 {
-                    var targetAsset = await _context.Assets.FindAsync(ticket.AssetId.Value);
-                    ticket.TargetTeam = targetAsset?.MaintenanceTeam ?? MaintenanceTeams.IT;
-                }
-                else if (string.IsNullOrWhiteSpace(ticket.TargetTeam))
-                {
-                    ticket.TargetTeam = MaintenanceTeams.IT;
+                    if (ticket.AssetId.HasValue)
+                    {
+                        var targetAsset = await _context.Assets.FindAsync(ticket.AssetId.Value);
+                        ticket.TargetTeam = targetAsset?.MaintenanceTeam ?? MaintenanceTeams.IT;
+                    }
+                    else
+                    {
+                        ticket.TargetTeam = MaintenanceTeams.IT;
+                    }
                 }
 
                 ticket.OpenedDT = DateTime.Now;
@@ -239,6 +256,10 @@ namespace StockPortal.Controllers
                 }
 
                 await _context.SaveChangesAsync();
+
+                var creatorUser = _currentUserService.GetCurrentUser() ?? await _context.Users.Include(u => u.Department).FirstOrDefaultAsync(u => u.Id == ticket.OpenedBy);
+                await _notificationService.NotifyTicketCreatedAsync(ticket, creatorUser);
+
                 TempData["SuccessMessage"] = $"Ticket #{ticket.Id} created successfully!";
                 return RedirectToAction(nameof(Details), new { id = ticket.Id });
             }
@@ -436,6 +457,9 @@ namespace StockPortal.Controllers
 
             await _context.SaveChangesAsync();
 
+            var autoCreator = _currentUserService.GetCurrentUser() ?? await _context.Users.Include(u => u.Department).FirstOrDefaultAsync(u => u.Id == ticket.OpenedBy);
+            await _notificationService.NotifyTicketCreatedAsync(ticket, autoCreator);
+
             TempData["SuccessMessage"] = $"Automated Ticket #{ticket.Id} created for PC '{pcName}'!";
             return RedirectToAction(nameof(Details), new { id = ticket.Id });
         }
@@ -502,6 +526,10 @@ namespace StockPortal.Controllers
             _context.Update(ticket);
             await _context.SaveChangesAsync();
 
+            var statusObj = await _context.TicketStatuses.FindAsync(statusId);
+            var statusActor = _currentUserService.GetCurrentUser();
+            await _notificationService.NotifyStatusChangedAsync(ticket, statusObj?.Status ?? statusId.ToString(), statusActor);
+
             TempData["SuccessMessage"] = "Ticket status updated.";
             return RedirectToAction(nameof(Details), new { id = ticketId });
         }
@@ -539,6 +567,10 @@ namespace StockPortal.Controllers
             }
 
             await _context.SaveChangesAsync();
+
+            var closeActor = _currentUserService.GetCurrentUser();
+            await _notificationService.NotifyStatusChangedAsync(ticket, "Closed", closeActor);
+
             TempData["SuccessMessage"] = $"Ticket #{ticketId} was resolved and closed.";
             return RedirectToAction(nameof(Details), new { id = ticketId });
         }
@@ -546,15 +578,35 @@ namespace StockPortal.Controllers
         // POST: Tickets/AssignTechnician
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> AssignTechnician(int ticketId, int techUserId)
+        public async Task<IActionResult> AssignTechnician(int ticketId, int techUserId, string? returnUrl = null)
         {
             var ticket = await _context.Tickets.Include(t => t.Handler).FirstOrDefaultAsync(t => t.Id == ticketId);
             if (ticket == null) return NotFound();
 
-            // RBAC Guard: Only Admin and assigned Maintenance team can assign technicians
-            if (!_currentUserService.CanManageTicket(ticket))
+            var currentUserId = _currentUserService.GetUserId();
+            bool canAssign = _currentUserService.CanManageTicket(ticket)
+                             || ticket.OpenedBy == currentUserId
+                             || ticket.OnBehalfOf == currentUserId;
+
+            // RBAC Guard: Admin, assigned Maintenance team, or ticket requester can assign/reassign technician
+            if (!canAssign)
             {
                 return Forbid();
+            }
+
+            if (ticket.StatusId == 5 || ticket.ClosedDT.HasValue)
+            {
+                TempData["ErrorMessage"] = "Cannot reassign technician on a closed ticket.";
+                if (!string.IsNullOrWhiteSpace(returnUrl) && Url.IsLocalUrl(returnUrl)) return Redirect(returnUrl);
+                return RedirectToAction(nameof(Details), new { id = ticketId });
+            }
+
+            var techUser = techUserId > 0 ? await _context.Users.FindAsync(techUserId) : null;
+            if (techUser != null && techUser.Role == SystemRoles.Maintenance && !string.Equals(techUser.MaintenanceTeam, ticket.TargetTeam, StringComparison.OrdinalIgnoreCase))
+            {
+                TempData["ErrorMessage"] = $"Selected technician does not belong to the responsible {ticket.TargetTeam} department.";
+                if (!string.IsNullOrWhiteSpace(returnUrl) && Url.IsLocalUrl(returnUrl)) return Redirect(returnUrl);
+                return RedirectToAction(nameof(Details), new { id = ticketId });
             }
 
             if (ticket.Handler == null)
@@ -562,25 +614,129 @@ namespace StockPortal.Controllers
                 _context.TicketHandlers.Add(new TicketHandler
                 {
                     TicketId = ticketId,
-                    TechUserId = techUserId,
+                    TechUserId = techUserId > 0 ? techUserId : null,
                     AssignedDT = DateTime.Now
                 });
             }
             else
             {
-                ticket.Handler.TechUserId = techUserId;
+                ticket.Handler.TechUserId = techUserId > 0 ? techUserId : null;
                 ticket.Handler.AssignedDT = DateTime.Now;
                 _context.Update(ticket.Handler);
             }
 
-            if (ticket.StatusId == 1) // Move from opened to pending
+            if (techUserId > 0 && ticket.StatusId == 1) // Move from opened to pending
             {
                 ticket.StatusId = 2;
                 _context.Update(ticket);
             }
 
+            // Record timeline activity message
+            if (techUser != null)
+            {
+                _context.TicketMessages.Add(new TicketMsg
+                {
+                    TicketId = ticketId,
+                    UserId = currentUserId > 0 ? currentUserId : techUserId,
+                    Msg = $"👤 ASSIGNED SPECIALIST: Ticket assigned to {techUser.FullName} ({techUser.RoleDisplay}).",
+                    TimeStamp = DateTime.Now
+                });
+            }
+
             await _context.SaveChangesAsync();
-            TempData["SuccessMessage"] = "Technician assigned successfully.";
+
+            if (techUser != null)
+            {
+                var assignActor = _currentUserService.GetCurrentUser();
+                await _notificationService.NotifyStatusChangedAsync(ticket, $"Assigned to {techUser.FullName}", assignActor);
+            }
+
+            TempData["SuccessMessage"] = techUser != null 
+                ? $"Assigned to {techUser.FullName} successfully." 
+                : "Technician unassigned.";
+
+            if (!string.IsNullOrWhiteSpace(returnUrl) && Url.IsLocalUrl(returnUrl))
+            {
+                return Redirect(returnUrl);
+            }
+            return RedirectToAction(nameof(Details), new { id = ticketId });
+        }
+
+        // POST: Tickets/AssignTeam
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> AssignTeam(int ticketId, string targetTeam, string? returnUrl)
+        {
+            var ticket = await _context.Tickets.Include(t => t.Handler).FirstOrDefaultAsync(t => t.Id == ticketId);
+            if (ticket == null) return NotFound();
+
+            var currentUserId = _currentUserService.GetUserId();
+            bool canReassign = _currentUserService.IsAdmin()
+                               || _currentUserService.CanManageTicket(ticket)
+                               || ticket.OpenedBy == currentUserId
+                               || ticket.OnBehalfOf == currentUserId;
+
+            if (!canReassign)
+            {
+                return Forbid();
+            }
+
+            if (ticket.StatusId == 5 || ticket.ClosedDT.HasValue)
+            {
+                TempData["ErrorMessage"] = "Cannot reassign a closed ticket.";
+                if (!string.IsNullOrWhiteSpace(returnUrl) && Url.IsLocalUrl(returnUrl)) return Redirect(returnUrl);
+                return RedirectToAction(nameof(Details), new { id = ticketId });
+            }
+
+            var validTeams = new[] { MaintenanceTeams.IT, MaintenanceTeams.Biomedical, MaintenanceTeams.General };
+            var normalizedTeam = targetTeam?.ToUpper().Trim() ?? "";
+            if (!validTeams.Contains(normalizedTeam))
+            {
+                TempData["ErrorMessage"] = "Invalid maintenance team selected.";
+                if (!string.IsNullOrWhiteSpace(returnUrl) && Url.IsLocalUrl(returnUrl)) return Redirect(returnUrl);
+                return RedirectToAction(nameof(Details), new { id = ticketId });
+            }
+
+            var oldTeam = ticket.TargetTeam;
+            if (oldTeam != normalizedTeam)
+            {
+                ticket.TargetTeam = normalizedTeam;
+
+                // If currently assigned tech belongs to a different maintenance team, unassign them
+                if (ticket.Handler != null && ticket.Handler.TechUserId.HasValue)
+                {
+                    var currentTech = await _context.Users.FindAsync(ticket.Handler.TechUserId.Value);
+                    if (currentTech != null && currentTech.Role == SystemRoles.Maintenance && currentTech.MaintenanceTeam != normalizedTeam)
+                    {
+                        ticket.Handler.TechUserId = null;
+                        if (ticket.StatusId == 2)
+                        {
+                            ticket.StatusId = 1; // back to opened/unassigned
+                        }
+                    }
+                }
+
+                _context.TicketMessages.Add(new TicketMsg
+                {
+                    TicketId = ticket.Id,
+                    UserId = currentUserId > 0 ? currentUserId : ticket.OpenedBy,
+                    Msg = $"🔄 REASSIGNED RESPONSIBLE TEAM: Transferred from {oldTeam} to {normalizedTeam} maintenance team.",
+                    TimeStamp = DateTime.Now
+                });
+
+                _context.Update(ticket);
+                await _context.SaveChangesAsync();
+
+                var actor = _currentUserService.GetCurrentUser();
+                await _notificationService.NotifyTicketCreatedAsync(ticket, actor);
+
+                TempData["SuccessMessage"] = $"Ticket #{ticket.Id} successfully assigned to {normalizedTeam} team.";
+            }
+
+            if (!string.IsNullOrWhiteSpace(returnUrl) && Url.IsLocalUrl(returnUrl))
+            {
+                return Redirect(returnUrl);
+            }
             return RedirectToAction(nameof(Details), new { id = ticketId });
         }
 
@@ -611,15 +767,26 @@ namespace StockPortal.Controllers
                 return RedirectToAction(nameof(Details), new { id = ticketId });
             }
 
-            _context.TicketMessages.Add(new TicketMsg
+            var currentUserId = _currentUserService.GetUserId();
+            if (currentUserId > 0)
+            {
+                userId = currentUserId;
+            }
+
+            var newMsg = new TicketMsg
             {
                 TicketId = ticketId,
                 UserId = userId,
                 Msg = msg.Trim(),
                 TimeStamp = DateTime.Now
-            });
+            };
+            _context.TicketMessages.Add(newMsg);
 
             await _context.SaveChangesAsync();
+
+            var senderUser = await _context.Users.Include(u => u.Department).FirstOrDefaultAsync(u => u.Id == userId) ?? _currentUserService.GetCurrentUser();
+            await _notificationService.NotifyTicketMessageAsync(ticket, newMsg, senderUser);
+
             TempData["SuccessMessage"] = "Message posted.";
             return RedirectToAction(nameof(Details), new { id = ticketId });
         }
@@ -786,7 +953,18 @@ namespace StockPortal.Controllers
             ViewBag.UserAssetsCount = userAssets.Count;
             ViewBag.CurrentUserId = currentUserId ?? 0;
             ViewBag.Users = new SelectList(await _context.Users.Where(u => u.IsActive == true).OrderBy(u => u.FullName).ToListAsync(), "Id", "FullName", defaultUserId);
-            ViewBag.Technicians = new SelectList(await _context.Users.Where(u => u.IsActive == true).OrderBy(u => u.FullName).ToListAsync(), "Id", "FullName");
+            var techUsers = await _context.Users
+                .Where(u => u.IsActive == true && (u.Role == SystemRoles.Maintenance || u.Role == SystemRoles.Admin))
+                .OrderBy(u => u.FullName)
+                .Select(u => new {
+                    u.Id,
+                    u.FullName,
+                    RoleDisplay = u.RoleDisplay,
+                    MaintenanceTeam = u.MaintenanceTeam ?? "IT"
+                })
+                .ToListAsync();
+            ViewBag.TechniciansList = techUsers;
+            ViewBag.Technicians = new SelectList(techUsers, "Id", "FullName");
             ViewBag.Statuses = new SelectList(await _context.TicketStatuses.ToListAsync(), "Id", "Status");
             ViewBag.MaintenanceTeams = new SelectList(MaintenanceTeams.All, MaintenanceTeams.IT);
         }

@@ -211,7 +211,7 @@ namespace StockPortal.Tests
             mockUserService.Setup(s => s.IsMaintenance()).Returns(true);
             mockUserService.Setup(s => s.GetMaintenanceTeam()).Returns(MaintenanceTeams.General);
 
-            var controller = new TicketsController(context, mockUserService.Object);
+            var controller = new TicketsController(context, mockUserService.Object, new NotificationService(context));
             var result = await controller.Index(statusId: null, priority: null, type: null, search: null, filter: null);
 
             var viewResult = Assert.IsType<ViewResult>(result);
@@ -310,7 +310,7 @@ namespace StockPortal.Tests
             mockUserService.Setup(s => s.GetUserId()).Returns(101);
             mockUserService.Setup(s => s.IsEndUser()).Returns(true);
 
-            var controller = new TicketsController(context, mockUserService.Object);
+            var controller = new TicketsController(context, mockUserService.Object, new NotificationService(context));
             controller.TempData = new Microsoft.AspNetCore.Mvc.ViewFeatures.TempDataDictionary(
                 new DefaultHttpContext(),
                 Mock.Of<Microsoft.AspNetCore.Mvc.ViewFeatures.ITempDataProvider>());
@@ -357,7 +357,7 @@ namespace StockPortal.Tests
             mockUserService.Setup(s => s.GetUserId()).Returns(101);
             mockUserService.Setup(s => s.CanAccessTicket(It.IsAny<Ticket>())).Returns(true);
 
-            var controller = new TicketsController(context, mockUserService.Object);
+            var controller = new TicketsController(context, mockUserService.Object, new NotificationService(context));
             controller.TempData = new Microsoft.AspNetCore.Mvc.ViewFeatures.TempDataDictionary(
                 new DefaultHttpContext(),
                 Mock.Of<Microsoft.AspNetCore.Mvc.ViewFeatures.ITempDataProvider>());
@@ -444,7 +444,7 @@ namespace StockPortal.Tests
             var mockItTech = new Mock<ICurrentUserService>();
             mockItTech.Setup(s => s.CanManageTicket(It.Is<Ticket>(t => t.TargetTeam == MaintenanceTeams.Biomedical))).Returns(false);
 
-            var ticketsController = new TicketsController(context, mockItTech.Object);
+            var ticketsController = new TicketsController(context, mockItTech.Object, new NotificationService(context));
 
             var updateStatusResult = await ticketsController.UpdateStatus(ticket.Id, 2);
             Assert.IsType<ForbidResult>(updateStatusResult);

@@ -172,7 +172,7 @@
                     @if (asset.User != null)
                     {
                         <div class="fw-bold text-dark fs-5">@asset.User.FullName</div>
-                        <div class="text-muted small">@asset.User.Role &bull; @(asset.User.Department?.Name ?? "Staff")</div>
+                        <div class="text-muted small">@asset.User.RoleDisplay &bull; @(asset.User.Department?.Name ?? "Staff")</div>
                         <div class="badge bg-primary bg-opacity-10 text-primary mt-1">@(asset.CustodyType?.Type ?? "Custody")</div>
                     }
                     else
