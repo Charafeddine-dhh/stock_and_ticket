@@ -5,25 +5,32 @@ using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.EntityFrameworkCore;
 using StockPortal.Data;
 using StockPortal.Models;
+using StockPortal.Services;
 
 namespace StockPortal.Controllers
 {
     public class DirectoryController : Controller
     {
         private readonly StockDbContext _context;
+        private readonly ICurrentUserService _currentUserService;
 
-        public DirectoryController(StockDbContext context)
+        public DirectoryController(StockDbContext context, ICurrentUserService currentUserService)
         {
             _context = context;
+            _currentUserService = currentUserService;
         }
 
         // GET: Directory
         public async Task<IActionResult> Index()
         {
+            if (!_currentUserService.CanManageUsers()) return Forbid();
+
             ViewBag.Users = await _context.Users.Include(u => u.Department).OrderBy(u => u.FullName).ToListAsync();
             ViewBag.Rooms = await _context.Rooms.OrderBy(r => r.Floor).ThenBy(r => r.RoomNo).ToListAsync();
             ViewBag.Suppliers = await _context.Suppliers.OrderBy(s => s.Name).ToListAsync();
             ViewBag.Departments = await _context.Departments.Include(d => d.HeadUser).OrderBy(d => d.Name).ToListAsync();
+            ViewBag.AvailableRoles = SystemRoles.All;
+            ViewBag.AvailableTeams = MaintenanceTeams.All;
 
             return View();
         }
@@ -33,6 +40,8 @@ namespace StockPortal.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> CreateUser(User user)
         {
+            if (!_currentUserService.CanManageUsers()) return Forbid();
+
             if (!string.IsNullOrWhiteSpace(user.FullName))
             {
                 user.IsActive = true;
@@ -40,9 +49,33 @@ namespace StockPortal.Controllers
                 {
                     user.DomainUser = user.DomainUser.Trim();
                 }
+                user.Role = string.IsNullOrWhiteSpace(user.Role) ? SystemRoles.EndUser : user.Role.Trim().ToUpperInvariant();
+                if (user.Role != SystemRoles.Maintenance)
+                {
+                    user.MaintenanceTeam = null;
+                }
                 _context.Users.Add(user);
                 await _context.SaveChangesAsync();
-                TempData["SuccessMessage"] = $"User {user.FullName} (PC Username: {user.DomainUser}) registered successfully with Auto-Login enabled.";
+                TempData["SuccessMessage"] = $"User {user.FullName} (PC Username: {user.DomainUser}, Role: {user.Role}) registered successfully with Auto-Login enabled.";
+            }
+            return RedirectToAction(nameof(Index));
+        }
+
+        // POST: Directory/UpdateUserRole
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> UpdateUserRole(int id, string role, string? maintenanceTeam)
+        {
+            if (!_currentUserService.CanManageUsers()) return Forbid();
+
+            var user = await _context.Users.FindAsync(id);
+            if (user != null)
+            {
+                user.Role = string.IsNullOrWhiteSpace(role) ? SystemRoles.EndUser : role.Trim().ToUpperInvariant();
+                user.MaintenanceTeam = (user.Role == SystemRoles.Maintenance) ? maintenanceTeam : null;
+                _context.Update(user);
+                await _context.SaveChangesAsync();
+                TempData["SuccessMessage"] = $"User {user.FullName} role updated to {user.Role} {(user.MaintenanceTeam != null ? $"({user.MaintenanceTeam})" : "")}.";
             }
             return RedirectToAction(nameof(Index));
         }
@@ -52,6 +85,8 @@ namespace StockPortal.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> ToggleUserStatus(int id)
         {
+            if (!_currentUserService.CanManageUsers()) return Forbid();
+
             var user = await _context.Users.FindAsync(id);
             if (user != null)
             {
@@ -68,6 +103,8 @@ namespace StockPortal.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> CreateRoom(Room room)
         {
+            if (!_currentUserService.CanManageUsers()) return Forbid();
+
             if (room.RoomNo.HasValue && room.Floor.HasValue)
             {
                 _context.Rooms.Add(room);
@@ -82,6 +119,8 @@ namespace StockPortal.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> DeleteRoom(int id)
         {
+            if (!_currentUserService.CanManageUsers()) return Forbid();
+
             var room = await _context.Rooms.Include(r => r.Assets).FirstOrDefaultAsync(r => r.Id == id);
             if (room != null)
             {
@@ -104,6 +143,8 @@ namespace StockPortal.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> CreateSupplier(Supplier supplier)
         {
+            if (!_currentUserService.CanManageUsers()) return Forbid();
+
             if (!string.IsNullOrWhiteSpace(supplier.Name))
             {
                 supplier.IsActive = true;
@@ -119,6 +160,8 @@ namespace StockPortal.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> ToggleSupplierStatus(int id)
         {
+            if (!_currentUserService.CanManageUsers()) return Forbid();
+
             var supplier = await _context.Suppliers.FindAsync(id);
             if (supplier != null)
             {
@@ -135,6 +178,8 @@ namespace StockPortal.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> CreateDepartment(Department department)
         {
+            if (!_currentUserService.CanManageUsers()) return Forbid();
+
             if (!string.IsNullOrWhiteSpace(department.Name))
             {
                 _context.Departments.Add(department);
@@ -149,6 +194,8 @@ namespace StockPortal.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> DeleteDepartment(int id)
         {
+            if (!_currentUserService.CanManageUsers()) return Forbid();
+
             var dept = await _context.Departments.Include(d => d.Users).FirstOrDefaultAsync(d => d.Id == id);
             if (dept != null)
             {

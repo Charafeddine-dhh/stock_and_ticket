@@ -44,6 +44,11 @@
                                 <option value="">-- None --</option>
                             </select>
                         </div>
+                        <div class="col-md-4">
+                            <label asp-for="MaintenanceTeam" class="form-label fw-semibold">Designated Maintenance Team</label>
+                            <select asp-for="MaintenanceTeam" class="form-select" asp-items="ViewBag.MaintenanceTeams" required></select>
+                            <div class="form-text small">Routing target for support tickets.</div>
+                        </div>
                     </div>
 
                     <h6 class="fw-bold text-muted text-uppercase mb-3 pb-2 border-bottom">2. Status & Location</h6>

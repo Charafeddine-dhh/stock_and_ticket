@@ -1,9 +1,11 @@
 @model IEnumerable<StockPortal.Models.Asset>
+@inject StockPortal.Services.ICurrentUserService CurrentUser
 @{
-    ViewData["Title"] = "Stock & IT Asset Inventory";
+    ViewData["Title"] = CurrentUser.IsEndUser() ? "My Assigned Equipment" : "Stock & IT Asset Inventory";
     var rooms = ViewBag.Rooms as List<StockPortal.Models.Room> ?? new();
     var types = ViewBag.Types as List<string> ?? new();
     var selectedWarranty = ViewBag.SelectedWarranty as string;
+    bool canManage = CurrentUser.CanManageAssets();
 }
 
 <!-- Filter & Search Toolbar -->
@@ -63,16 +65,21 @@
 <div class="card shadow-sm border-0">
     <div class="card-header bg-white d-flex justify-content-between align-items-center py-3">
         <div>
-            <h6 class="mb-0 fw-bold">Inventory Assets List</h6>
-            <small class="text-muted">Showing @Model.Count() registered items &bull; Total Value: @Model.Sum(a => a.Price ?? 0).ToString("C0")</small>
+            <h6 class="mb-0 fw-bold">@(CurrentUser.IsEndUser() ? "My Custody Equipment" : "Inventory Assets List")</h6>
+            <small class="text-muted">
+                @(CurrentUser.IsEndUser() ? $"Showing {Model.Count()} equipment items currently in your custody" : $"Showing {Model.Count()} registered items • Total Value: {Model.Sum(a => a.Price ?? 0):C0}")
+            </small>
         </div>
         <div class="d-flex gap-2">
             <a href="@Url.Action("ExportCsv", new { search = ViewBag.Search, status = ViewBag.SelectedStatus, type = ViewBag.SelectedType, roomId = ViewBag.SelectedRoomId })" class="btn btn-outline-success btn-sm">
                 <i class="fa-solid fa-file-csv me-1"></i> Export CSV
             </a>
-            <a href="@Url.Action("Create")" class="btn btn-primary btn-sm">
-                <i class="fa-solid fa-plus me-1"></i> Register New Asset
-            </a>
+            @if (canManage)
+            {
+                <a href="@Url.Action("Create")" class="btn btn-primary btn-sm">
+                    <i class="fa-solid fa-plus me-1"></i> Register New Asset
+                </a>
+            }
         </div>
     </div>
     <div class="card-body p-0">
@@ -81,6 +88,7 @@
                 <thead class="table-light">
                     <tr>
                         <th>Asset Tag / Hospital No</th>
+                        <th>Team</th>
                         <th>Brand & Model</th>
                         <th>Type</th>
                         <th>Location</th>
@@ -94,7 +102,7 @@
                     @if (!Model.Any())
                     {
                         <tr>
-                            <td colspan="8" class="text-center text-muted py-5">
+                            <td colspan="9" class="text-center text-muted py-5">
                                 <i class="fa-solid fa-box-open fa-2x mb-2 text-secondary"></i>
                                 <div>No assets match your search criteria.</div>
                             </td>
@@ -108,6 +116,11 @@
                                     <i class="fa-solid fa-barcode text-muted me-1"></i> @(string.IsNullOrWhiteSpace(item.HospitalNo) ? $"ASSET-#{item.Id}" : item.HospitalNo)
                                 </a>
                                 <div class="small text-muted font-monospace" style="font-size: 0.75rem;">SN: @(item.SerialNo ?? "N/A")</div>
+                            </td>
+                            <td>
+                                <span class="badge @(item.MaintenanceTeam == "BIOMEDICAL" ? "bg-info text-dark" : item.MaintenanceTeam == "GENERAL" ? "bg-warning text-dark" : "bg-primary")">
+                                    @item.MaintenanceTeam
+                                </span>
                             </td>
                             <td>
                                 <div class="fw-semibold">@(item.Brand ?? "Unbranded")</div>
@@ -194,21 +207,30 @@
                                     <a href="@Url.Action("PrintTag", new { id = item.Id })" class="btn btn-outline-dark" title="Print Barcode Tag" target="_blank">
                                         <i class="fa-solid fa-print"></i>
                                     </a>
-                                    <a href="@Url.Action("Edit", new { id = item.Id })" class="btn btn-outline-secondary" title="Edit Asset">
-                                        <i class="fa-solid fa-pen"></i>
-                                    </a>
+                                    @if (canManage)
+                                    {
+                                        <a href="@Url.Action("Edit", new { id = item.Id })" class="btn btn-outline-secondary" title="Edit Asset">
+                                            <i class="fa-solid fa-pen"></i>
+                                        </a>
+                                    }
                                     <a href="@Url.Action("Create", "Tickets", new { assetId = item.Id })" class="btn btn-outline-warning" title="Open Ticket for Asset">
                                         <i class="fa-solid fa-ticket"></i>
                                     </a>
-                                    <a href="@Url.Action("Delete", new { id = item.Id })" class="btn btn-outline-danger" title="Delete or Retire Asset">
-                                        <i class="fa-solid fa-trash-can"></i>
-                                    </a>
+                                    @if (canManage)
+                                    {
+                                        <a href="@Url.Action("Delete", new { id = item.Id })" class="btn btn-outline-danger" title="Delete or Retire Asset">
+                                            <i class="fa-solid fa-trash-can"></i>
+                                        </a>
+                                    }
                                 </div>
                             </td>
                         </tr>
                     }
                 </tbody>
             </table>
+        </div>
+    </div>
+</div>
         </div>
     </div>
 </div>

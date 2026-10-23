@@ -12,4 +12,11 @@
     <PackageReference Include="Pomelo.EntityFrameworkCore.MySql" Version="9.0.0" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Remove="StockPortal.Tests\**" />
+    <Content Remove="StockPortal.Tests\**" />
+    <EmbeddedResource Remove="StockPortal.Tests\**" />
+    <None Remove="StockPortal.Tests\**" />
+  </ItemGroup>
+
 </Project>

@@ -37,6 +37,20 @@ namespace StockPortal.Controllers
                 .Include(t => t.Messages)
                 .AsQueryable();
 
+            // RBAC Filtering
+            if (_currentUserService.IsEndUser())
+            {
+                // End Users view only tickets they authored or on behalf
+                query = query.Where(t => t.OpenedBy == currentUserId || t.OnBehalfOf == currentUserId);
+            }
+            else if (_currentUserService.IsMaintenance())
+            {
+                // Maintenance users view only tickets routed to their designated team queue
+                var myTeam = _currentUserService.GetMaintenanceTeam();
+                query = query.Where(t => t.TargetTeam == myTeam);
+            }
+            // ADMIN has unrestricted access across all tickets
+
             if (statusId.HasValue && statusId.Value > 0)
             {
                 query = query.Where(t => t.StatusId == statusId.Value);
@@ -112,6 +126,12 @@ namespace StockPortal.Controllers
 
             if (ticket == null) return NotFound();
 
+            // RBAC Guard: Verify access permissions
+            if (!_currentUserService.CanAccessTicket(ticket))
+            {
+                return Forbid();
+            }
+
             var vm = new TicketDetailsViewModel
             {
                 Ticket = ticket,
@@ -129,7 +149,7 @@ namespace StockPortal.Controllers
         public async Task<IActionResult> Create(int? assetId)
         {
             var currentUserId = _currentUserService.GetUserId();
-            await PopulateDropdowns(assetId, currentUserId);
+            await PopulateDropdowns(assetId, currentUserId, currentUserId);
 
             var ticket = new Ticket
             {
@@ -148,10 +168,32 @@ namespace StockPortal.Controllers
         // POST: Tickets/Create
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Create(Ticket ticket, string? initialMessage, int? assignedTechId)
+        public async Task<IActionResult> Create(Ticket ticket, string? manualAsset, string? initialMessage, int? assignedTechId)
         {
+            var currentUserId = _currentUserService.GetUserId();
+            ticket.OpenedBy = currentUserId > 0 ? currentUserId : ticket.OpenedBy;
+
+            bool isOnBehalfOf = ticket.OnBehalfOf.HasValue && ticket.OnBehalfOf.Value != ticket.OpenedBy;
+
             if (ModelState.IsValid)
             {
+                // If opening on behalf of another user, personal asset dropdown is cleared
+                if (isOnBehalfOf)
+                {
+                    ticket.AssetId = null;
+                }
+
+                // Automated ticket routing to asset's designated maintenance team
+                if (ticket.AssetId.HasValue)
+                {
+                    var targetAsset = await _context.Assets.FindAsync(ticket.AssetId.Value);
+                    ticket.TargetTeam = targetAsset?.MaintenanceTeam ?? MaintenanceTeams.IT;
+                }
+                else if (string.IsNullOrWhiteSpace(ticket.TargetTeam))
+                {
+                    ticket.TargetTeam = MaintenanceTeams.IT;
+                }
+
                 ticket.OpenedDT = DateTime.Now;
                 ticket.StatusId = 1; // opened
                 _context.Tickets.Add(ticket);
@@ -170,14 +212,28 @@ namespace StockPortal.Controllers
                     _context.Update(ticket);
                 }
 
-                // If initial message provided
+                // Construct initial message with manual asset information if on behalf of another user
+                var messageBuilder = new StringBuilder();
+
+                if (isOnBehalfOf && !string.IsNullOrWhiteSpace(manualAsset))
+                {
+                    messageBuilder.AppendLine($"[ON BEHALF OF ASSET / PC]: {manualAsset.Trim()}");
+                    messageBuilder.AppendLine();
+                }
+
                 if (!string.IsNullOrWhiteSpace(initialMessage))
+                {
+                    messageBuilder.Append(initialMessage.Trim());
+                }
+
+                var fullMsg = messageBuilder.ToString().Trim();
+                if (!string.IsNullOrWhiteSpace(fullMsg))
                 {
                     _context.TicketMessages.Add(new TicketMsg
                     {
                         TicketId = ticket.Id,
                         UserId = ticket.OpenedBy,
-                        Msg = initialMessage.Trim(),
+                        Msg = fullMsg,
                         TimeStamp = DateTime.Now
                     });
                 }
@@ -187,8 +243,236 @@ namespace StockPortal.Controllers
                 return RedirectToAction(nameof(Details), new { id = ticket.Id });
             }
 
-            await PopulateDropdowns(ticket.AssetId);
+            await PopulateDropdowns(ticket.AssetId, ticket.OnBehalfOf, currentUserId);
             return View(ticket);
+        }
+
+        // GET: Tickets/AutoTicket
+        public async Task<IActionResult> AutoTicket(string? pcName, int? assetId)
+        {
+            var currentUserId = _currentUserService.GetUserId();
+            var currentUser = await _context.Users.Include(u => u.Department).FirstOrDefaultAsync(u => u.Id == currentUserId);
+
+            // Determine client PC name
+            if (string.IsNullOrWhiteSpace(pcName))
+            {
+                pcName = Request.Headers["X-Computer-Name"].FirstOrDefault()
+                    ?? Request.Headers["COMPUTERNAME"].FirstOrDefault();
+            }
+
+            if (string.IsNullOrWhiteSpace(pcName))
+            {
+                pcName = Environment.MachineName;
+            }
+
+            string clientIp = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "127.0.0.1";
+
+            // Resolve Asset by ID or by PC Name (hospitalNo in database)
+            Asset? matchedAsset = null;
+            if (assetId.HasValue && assetId.Value > 0)
+            {
+                matchedAsset = await _context.Assets
+                    .Include(a => a.Room)
+                    .Include(a => a.User)
+                    .Include(a => a.CustodyType)
+                    .Include(a => a.Supplier)
+                    .FirstOrDefaultAsync(a => a.Id == assetId.Value);
+            }
+
+            if (matchedAsset == null && !string.IsNullOrWhiteSpace(pcName))
+            {
+                var search = pcName.Trim().ToLower();
+                matchedAsset = await _context.Assets
+                    .Include(a => a.Room)
+                    .Include(a => a.User)
+                    .Include(a => a.CustodyType)
+                    .Include(a => a.Supplier)
+                    .FirstOrDefaultAsync(a => a.HospitalNo != null && a.HospitalNo.ToLower() == search);
+            }
+
+            // Fallback: check if the logged in user has an assigned PC asset
+            if (matchedAsset == null && currentUserId > 0)
+            {
+                matchedAsset = await _context.Assets
+                    .Include(a => a.Room)
+                    .Include(a => a.User)
+                    .Include(a => a.CustodyType)
+                    .Include(a => a.Supplier)
+                    .FirstOrDefaultAsync(a => a.UserId == currentUserId);
+            }
+
+            var vm = new AutoTicketViewModel
+            {
+                DetectedPcName = matchedAsset?.HospitalNo ?? pcName ?? Environment.MachineName,
+                ClientIp = clientIp,
+                IsAssetFound = (matchedAsset != null),
+                MatchedAsset = matchedAsset,
+                SelectedAssetId = matchedAsset?.Id,
+                SelectedRoomId = matchedAsset?.RoomId,
+                SelectedUserId = matchedAsset?.UserId ?? currentUserId,
+                Category = "Hardware",
+                Priority = 2,
+                UserNotes = "",
+                AvailableAssets = await _context.Assets.OrderBy(a => a.HospitalNo).ToListAsync(),
+                AvailableRooms = await _context.Rooms.OrderBy(r => r.RoomNo).ToListAsync(),
+                AvailableUsers = await _context.Users.Where(u => u.IsActive == true).OrderBy(u => u.FullName).ToListAsync()
+            };
+
+            return View(vm);
+        }
+
+        // POST: Tickets/AutoTicket
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> AutoTicket(AutoTicketViewModel model)
+        {
+            var currentUserId = _currentUserService.GetUserId();
+            var currentUser = await _context.Users.Include(u => u.Department).FirstOrDefaultAsync(u => u.Id == currentUserId);
+
+            // 1. Resolve Asset
+            Asset? asset = null;
+            if (model.SelectedAssetId.HasValue && model.SelectedAssetId.Value > 0)
+            {
+                asset = await _context.Assets
+                    .Include(a => a.Room)
+                    .Include(a => a.User)
+                    .FirstOrDefaultAsync(a => a.Id == model.SelectedAssetId.Value);
+            }
+            else if (!string.IsNullOrWhiteSpace(model.DetectedPcName))
+            {
+                var search = model.DetectedPcName.Trim().ToLower();
+                asset = await _context.Assets
+                    .Include(a => a.Room)
+                    .Include(a => a.User)
+                    .FirstOrDefaultAsync(a => a.HospitalNo != null && a.HospitalNo.ToLower() == search);
+            }
+
+            // 2. If room was selected and asset exists, update asset room if not set or changed
+            Room? selectedRoom = null;
+            if (model.SelectedRoomId.HasValue && model.SelectedRoomId.Value > 0)
+            {
+                selectedRoom = await _context.Rooms.FindAsync(model.SelectedRoomId.Value);
+                if (asset != null && (asset.RoomId == null || asset.RoomId != model.SelectedRoomId.Value))
+                {
+                    asset.RoomId = model.SelectedRoomId.Value;
+                    _context.Update(asset);
+                }
+            }
+            else if (asset?.Room != null)
+            {
+                selectedRoom = asset.Room;
+            }
+
+            // 3. If user selected and asset exists, update asset custodian if not set
+            User? assignedUser = null;
+            if (model.SelectedUserId.HasValue && model.SelectedUserId.Value > 0)
+            {
+                assignedUser = await _context.Users.FindAsync(model.SelectedUserId.Value);
+                if (asset != null && asset.UserId == null)
+                {
+                    asset.UserId = model.SelectedUserId.Value;
+                    _context.Update(asset);
+                }
+            }
+            else if (asset?.User != null)
+            {
+                assignedUser = asset.User;
+            }
+
+            // 4. Create Ticket
+            var ticket = new Ticket
+            {
+                AssetId = asset?.Id,
+                OpenedBy = currentUserId > 0 ? currentUserId : 1,
+                OnBehalfOf = assignedUser?.Id ?? (currentUserId > 0 ? currentUserId : 1),
+                Type = string.IsNullOrWhiteSpace(model.Category) ? "Hardware" : model.Category,
+                Priority = model.Priority > 0 ? model.Priority : 2,
+                StatusId = 1, // Opened
+                OpenedDT = DateTime.Now,
+                TargetTeam = asset?.MaintenanceTeam ?? MaintenanceTeams.IT
+            };
+
+            _context.Tickets.Add(ticket);
+            await _context.SaveChangesAsync();
+
+            // 5. Construct Telemetry Report Message
+            var pcName = asset?.HospitalNo ?? (!string.IsNullOrWhiteSpace(model.DetectedPcName) ? model.DetectedPcName : Environment.MachineName);
+            var roomDesc = selectedRoom != null ? $"Room {selectedRoom.RoomNo} (Floor {selectedRoom.Floor})" : "Unspecified";
+            var userDesc = assignedUser?.FullName ?? (currentUser?.FullName ?? "Unassigned");
+            var hardwareDesc = asset != null 
+                ? $"{asset.Brand ?? "Generic"} {(asset.ModelNo.HasValue ? "Model " + asset.ModelNo : "")} [S/N: {asset.SerialNo ?? "N/A"}]"
+                : "Workstation not yet tagged in Assets database";
+
+            var sb = new StringBuilder();
+            sb.AppendLine("🖥️ AUTOMATED SYSTEM & WORKSTATION REPORT");
+            sb.AppendLine($"• Workstation / PC Name: {pcName}");
+            sb.AppendLine($"• Location: {roomDesc}");
+            sb.AppendLine($"• Custodian / User: {userDesc}");
+            sb.AppendLine($"• Equipment: {hardwareDesc}");
+            sb.AppendLine($"• Reporter: {currentUser?.FullName ?? "System"} ({currentUser?.DomainUser ?? Environment.UserName})");
+            sb.AppendLine($"• Department: {currentUser?.Department?.Name ?? "General"}");
+            sb.AppendLine($"• Client Host / IP: {model.ClientIp}");
+            sb.AppendLine($"• Timestamp: {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
+
+            _context.TicketMessages.Add(new TicketMsg
+            {
+                TicketId = ticket.Id,
+                UserId = ticket.OpenedBy,
+                Msg = sb.ToString(),
+                TimeStamp = DateTime.Now
+            });
+
+            // 6. User Manual Notes (if entered)
+            if (!string.IsNullOrWhiteSpace(model.UserNotes))
+            {
+                _context.TicketMessages.Add(new TicketMsg
+                {
+                    TicketId = ticket.Id,
+                    UserId = ticket.OpenedBy,
+                    Msg = $"📝 USER NOTES:\n{model.UserNotes.Trim()}",
+                    TimeStamp = DateTime.Now.AddSeconds(1)
+                });
+            }
+
+            await _context.SaveChangesAsync();
+
+            TempData["SuccessMessage"] = $"Automated Ticket #{ticket.Id} created for PC '{pcName}'!";
+            return RedirectToAction(nameof(Details), new { id = ticket.Id });
+        }
+
+        // GET: Tickets/GetAssetByPcName
+        [HttpGet]
+        public async Task<IActionResult> GetAssetByPcName(string pcName)
+        {
+            if (string.IsNullOrWhiteSpace(pcName)) return Json(new { found = false });
+
+            var search = pcName.Trim().ToLower();
+            var asset = await _context.Assets
+                .Include(a => a.Room)
+                .Include(a => a.User)
+                .FirstOrDefaultAsync(a => a.HospitalNo != null && a.HospitalNo.ToLower() == search);
+
+            if (asset == null)
+            {
+                return Json(new { found = false });
+            }
+
+            return Json(new
+            {
+                found = true,
+                id = asset.Id,
+                hospitalNo = asset.HospitalNo,
+                brand = asset.Brand,
+                modelNo = asset.ModelNo,
+                serialNo = asset.SerialNo,
+                type = asset.Type,
+                roomId = asset.RoomId,
+                roomText = asset.Room != null ? $"Room {asset.Room.RoomNo} (Floor {asset.Room.Floor})" : null,
+                userId = asset.UserId,
+                userName = asset.User?.FullName,
+                status = asset.Status,
+                specs = asset.Specs
+            });
         }
 
         // POST: Tickets/UpdateStatus
@@ -198,6 +482,12 @@ namespace StockPortal.Controllers
         {
             var ticket = await _context.Tickets.FindAsync(ticketId);
             if (ticket == null) return NotFound();
+
+            // RBAC Guard: Only Admin and assigned Maintenance team can manage tickets
+            if (!_currentUserService.CanManageTicket(ticket))
+            {
+                return Forbid();
+            }
 
             ticket.StatusId = statusId;
             if (statusId == 5) // closed
@@ -224,8 +514,15 @@ namespace StockPortal.Controllers
             var ticket = await _context.Tickets.FindAsync(ticketId);
             if (ticket == null) return NotFound();
 
+            // RBAC Guard: Only Admin and assigned Maintenance team can close tickets
+            if (!_currentUserService.CanManageTicket(ticket))
+            {
+                return Forbid();
+            }
+
             ticket.StatusId = 5; // closed
             ticket.ClosedDT = DateTime.Now;
+            ticket.ResolutionDetails = resolutionNotes?.Trim();
             _context.Update(ticket);
 
             var currentUserId = _currentUserService.GetUserId();
@@ -253,6 +550,12 @@ namespace StockPortal.Controllers
         {
             var ticket = await _context.Tickets.Include(t => t.Handler).FirstOrDefaultAsync(t => t.Id == ticketId);
             if (ticket == null) return NotFound();
+
+            // RBAC Guard: Only Admin and assigned Maintenance team can assign technicians
+            if (!_currentUserService.CanManageTicket(ticket))
+            {
+                return Forbid();
+            }
 
             if (ticket.Handler == null)
             {
@@ -286,6 +589,22 @@ namespace StockPortal.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> AddMessage(int ticketId, int userId, string msg)
         {
+            var ticket = await _context.Tickets.FindAsync(ticketId);
+            if (ticket == null) return NotFound();
+
+            // Task 1: Lock messages once ticket is closed
+            if (ticket.StatusId == 5 || ticket.ClosedDT.HasValue)
+            {
+                TempData["ErrorMessage"] = "This ticket is closed. New messages cannot be added.";
+                return RedirectToAction(nameof(Details), new { id = ticketId });
+            }
+
+            // RBAC Guard: Verify access permission
+            if (!_currentUserService.CanAccessTicket(ticket))
+            {
+                return Forbid();
+            }
+
             if (string.IsNullOrWhiteSpace(msg))
             {
                 TempData["ErrorMessage"] = "Message cannot be empty.";
@@ -310,6 +629,14 @@ namespace StockPortal.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> LogMaintenance(int ticketId, int assetId, int technicianId, int? supplierId, int maintenanceType, string description, string? partsReplaced)
         {
+            var ticket = await _context.Tickets.FindAsync(ticketId);
+            if (ticket == null) return NotFound();
+
+            if (!_currentUserService.CanManageTicket(ticket))
+            {
+                return Forbid();
+            }
+
             var maintenance = new AssetMaintenance
             {
                 TicketId = ticketId,
@@ -359,6 +686,12 @@ namespace StockPortal.Controllers
 
             if (ticket == null) return NotFound();
 
+            // RBAC Guard: Verify access permissions
+            if (!_currentUserService.CanAccessTicket(ticket))
+            {
+                return Forbid();
+            }
+
             return View(ticket);
         }
 
@@ -374,6 +707,17 @@ namespace StockPortal.Controllers
                 .Include(t => t.Handler).ThenInclude(h => h!.TechUser)
                 .Include(t => t.Messages)
                 .AsQueryable();
+
+            // RBAC Filtering
+            if (_currentUserService.IsEndUser())
+            {
+                query = query.Where(t => t.OpenedBy == currentUserId || t.OnBehalfOf == currentUserId);
+            }
+            else if (_currentUserService.IsMaintenance())
+            {
+                var myTeam = _currentUserService.GetMaintenanceTeam();
+                query = query.Where(t => t.TargetTeam == myTeam);
+            }
 
             if (statusId.HasValue && statusId.Value > 0) query = query.Where(t => t.StatusId == statusId.Value);
             if (priority.HasValue && priority.Value > 0) query = query.Where(t => t.Priority == priority.Value);
@@ -399,11 +743,11 @@ namespace StockPortal.Controllers
             var tickets = await query.OrderByDescending(t => t.OpenedDT).ToListAsync();
 
             var sb = new StringBuilder();
-            sb.AppendLine("Ticket ID,Issue Category,Asset Tag,Asset Brand,Priority,Status,Requester,Assigned Technician,Opened Date,Closed Date,Total Messages");
+            sb.AppendLine("Ticket ID,Target Team,Issue Category,Asset Tag,Asset Brand,Priority,Status,Requester,Assigned Technician,Opened Date,Closed Date,Total Messages");
 
             foreach (var t in tickets)
             {
-                sb.AppendLine($"\"{t.Id}\",\"{EscapeCsv(t.Type)}\",\"{EscapeCsv(t.Asset?.HospitalNo)}\",\"{EscapeCsv(t.Asset?.Brand)}\",\"{t.PriorityName}\",\"{EscapeCsv(t.Status?.Status)}\",\"{EscapeCsv(t.OpenedByUser?.FullName)}\",\"{EscapeCsv(t.Handler?.TechUser?.FullName ?? "Unassigned")}\",\"{t.OpenedDT:yyyy-MM-dd HH:mm}\",\"{t.ClosedDT:yyyy-MM-dd HH:mm}\",\"{t.Messages.Count}\"");
+                sb.AppendLine($"\"{t.Id}\",\"{EscapeCsv(t.TargetTeam)}\",\"{EscapeCsv(t.Type)}\",\"{EscapeCsv(t.Asset?.HospitalNo)}\",\"{EscapeCsv(t.Asset?.Brand)}\",\"{t.PriorityName}\",\"{EscapeCsv(t.Status?.Status)}\",\"{EscapeCsv(t.OpenedByUser?.FullName)}\",\"{EscapeCsv(t.Handler?.TechUser?.FullName ?? "Unassigned")}\",\"{t.OpenedDT:yyyy-MM-dd HH:mm}\",\"{t.ClosedDT:yyyy-MM-dd HH:mm}\",\"{t.Messages.Count}\"");
             }
 
             var bytes = Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(sb.ToString())).ToArray();
@@ -416,17 +760,35 @@ namespace StockPortal.Controllers
             return value.Replace("\"", "\"\"");
         }
 
-        private async Task PopulateDropdowns(int? selectedAssetId = null, int? defaultUserId = null)
+        private async Task PopulateDropdowns(int? selectedAssetId = null, int? defaultUserId = null, int? currentUserId = null)
         {
-            var assets = await _context.Assets
+            // Only assets associated with the current user appear!
+            var userAssetsQuery = _context.Assets.AsQueryable();
+            if (currentUserId.HasValue && currentUserId.Value > 0)
+            {
+                userAssetsQuery = userAssetsQuery.Where(a => a.UserId == currentUserId.Value);
+            }
+
+            var userAssets = await userAssetsQuery
                 .OrderBy(a => a.HospitalNo)
-                .Select(a => new { a.Id, Display = $"{a.HospitalNo} - {a.Brand} ({a.Type})" })
+                .Select(a => new { 
+                    a.Id, 
+                    a.HospitalNo, 
+                    a.Brand, 
+                    a.Type, 
+                    MaintenanceTeam = a.MaintenanceTeam ?? MaintenanceTeams.IT, 
+                    Display = $"{a.HospitalNo} - {a.Brand} ({a.Type ?? "Workstation"})" 
+                })
                 .ToListAsync();
 
-            ViewBag.Assets = new SelectList(assets, "Id", "Display", selectedAssetId);
+            ViewBag.Assets = new SelectList(userAssets, "Id", "Display", selectedAssetId);
+            ViewBag.UserAssetsList = userAssets;
+            ViewBag.UserAssetsCount = userAssets.Count;
+            ViewBag.CurrentUserId = currentUserId ?? 0;
             ViewBag.Users = new SelectList(await _context.Users.Where(u => u.IsActive == true).OrderBy(u => u.FullName).ToListAsync(), "Id", "FullName", defaultUserId);
             ViewBag.Technicians = new SelectList(await _context.Users.Where(u => u.IsActive == true).OrderBy(u => u.FullName).ToListAsync(), "Id", "FullName");
             ViewBag.Statuses = new SelectList(await _context.TicketStatuses.ToListAsync(), "Id", "Status");
+            ViewBag.MaintenanceTeams = new SelectList(MaintenanceTeams.All, MaintenanceTeams.IT);
         }
     }
 }

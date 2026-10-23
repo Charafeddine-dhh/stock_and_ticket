@@ -1,6 +1,9 @@
 @model StockPortal.Models.Ticket
+@inject StockPortal.Services.ICurrentUserService CurrentUser
 @{
     ViewData["Title"] = "Open New Service Ticket";
+    int currentUserId = ViewBag.CurrentUserId ?? CurrentUser.GetUserId();
+    int userAssetsCount = ViewBag.UserAssetsCount ?? 0;
 }
 
 <div class="row justify-content-center">
@@ -10,31 +13,115 @@
                 <h5 class="mb-0 fw-bold"><i class="fa-solid fa-ticket text-primary me-2"></i> Open New Technical Support Ticket</h5>
             </div>
             <div class="card-body p-4">
-                <form asp-action="Create" method="post">
+                <form asp-action="Create" method="post" id="createTicketForm">
                     @Html.AntiForgeryToken()
                     <div asp-validation-summary="ModelOnly" class="text-danger mb-3"></div>
+                    <input type="hidden" asp-for="OpenedBy" value="@currentUserId" />
+
+                    <!-- Hidden target team input submitted with the form -->
+                    <input type="hidden" asp-for="TargetTeam" id="hiddenTargetTeam" value="IT" />
 
                     <div class="row g-3 mb-3">
-                        <div class="col-md-12">
-                            <label asp-for="AssetId" class="form-label fw-semibold">Target Hardware Asset (Optional)</label>
-                            <select asp-for="AssetId" class="form-select" asp-items="ViewBag.Assets">
-                                <option value="">-- General Service Request (No specific hardware) --</option>
-                            </select>
-                            <div class="form-text small">Select the equipment experiencing issues to link service logs and history.</div>
+                        <!-- Requester & On-Behalf -->
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Reported By</label>
+                            <input type="text" class="form-control bg-light" value="@CurrentUser.GetFullName() (@CurrentUser.GetRole())" readonly />
+                            <div class="form-text small">Logged-in domain user submitting this ticket.</div>
                         </div>
 
                         <div class="col-md-6">
+                            <label asp-for="OnBehalfOf" class="form-label fw-semibold">On Behalf Of</label>
+                            <select asp-for="OnBehalfOf" id="OnBehalfOf" class="form-select" asp-items="ViewBag.Users">
+                                <option value="@currentUserId" selected>Myself (@CurrentUser.GetFullName())</option>
+                            </select>
+                            <div class="form-text small">Select another staff member if submitting for a colleague.</div>
+                        </div>
+
+                        <!-- 1. Equipment Assigned to Current User (Visible when ticket is for myself) -->
+                        <div class="col-md-12" id="myAssetsContainer">
+                            <label asp-for="AssetId" class="form-label fw-semibold d-flex justify-content-between align-items-center">
+                                <span><i class="fa-solid fa-laptop text-primary me-1"></i> Your Assigned Hardware Asset</span>
+                                <span class="badge bg-light text-muted border fw-normal">@userAssetsCount Assigned</span>
+                            </label>
+                            <select asp-for="AssetId" id="AssetId" class="form-select">
+                                <option value="" data-team="" data-type="">-- General Service Request (No specific hardware) --</option>
+                                @if (ViewBag.UserAssetsList != null)
+                                {
+                                    foreach (var item in ViewBag.UserAssetsList)
+                                    {
+                                        <option value="@item.Id" data-team="@item.MaintenanceTeam" data-type="@item.Type">@item.Display</option>
+                                    }
+                                }
+                            </select>
+                            @if (userAssetsCount == 0)
+                            {
+                                <div class="alert alert-light border small text-muted mt-2 py-2">
+                                    <i class="fa-solid fa-circle-info text-primary me-1"></i> No equipment is currently registered to your personal custody. If reporting an issue with a shared workstation, select general request or describe it below.
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="form-text small">Choose the specific equipment from your custody experiencing technical issues.</div>
+                            }
+                        </div>
+
+                        <!-- 2. Manual Asset Specification (Visible ONLY when On-Behalf is selected) -->
+                        <div class="col-md-12" id="onBehalfAssetContainer" style="display: none;">
+                            <div class="alert alert-warning py-2 small mb-2 d-flex align-items-center gap-2">
+                                <i class="fa-solid fa-user-pen fs-6"></i>
+                                <div>
+                                    <strong>Filing on behalf of a colleague:</strong> Please specify their workstation or equipment tag below. It will be recorded directly into the service ticket message.
+                                </div>
+                            </div>
+                            <label class="form-label fw-semibold text-dark">
+                                Target Asset / Workstation Tag (Manual Entry)
+                            </label>
+                            <input type="text" name="manualAsset" id="manualAssetInput" class="form-control" 
+                                   placeholder="Enter PC Name, Asset Tag, Room, or Serial (e.g. HOSP-LAP-012, Room 301 Workstation, Dell OptiPlex 7080)..." />
+                            <div class="form-text small">Equipment details entered here will be logged directly into the technician's dispatch message.</div>
+                        </div>
+
+                        <!-- Target Maintenance Team (Locked & Dynamic) -->
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Target Maintenance Team</label>
+                            
+                            <!-- Container when an asset is selected: LOCKED from editing -->
+                            <div id="lockedTeamContainer">
+                                <div class="input-group">
+                                    <span class="input-group-text bg-light text-primary border-end-0">
+                                        <i class="fa-solid fa-lock text-primary"></i>
+                                    </span>
+                                    <input type="text" id="lockedTeamText" class="form-control bg-light fw-bold text-dark border-start-0" readonly value="IT Maintenance" />
+                                </div>
+                                <div class="form-text small text-success">
+                                    <i class="fa-solid fa-circle-check me-1"></i> Locked to asset's maintenance scope.
+                                </div>
+                            </div>
+
+                            <!-- Container when no asset is selected: General selector -->
+                            <div id="selectableTeamContainer" style="display: none;">
+                                <select id="selectTargetTeam" class="form-select">
+                                    <option value="IT" selected>IT Maintenance</option>
+                                    <option value="BIOMEDICAL">Biomedical Engineering</option>
+                                    <option value="GENERAL">General Facility Maintenance</option>
+                                </select>
+                                <div class="form-text small text-muted">
+                                    <i class="fa-solid fa-circle-info me-1"></i> Destination team for general request.
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Dynamic Issue Category -->
+                        <div class="col-md-4">
                             <label asp-for="Type" class="form-label fw-semibold">Issue Category</label>
-                            <select asp-for="Type" class="form-select">
-                                <option value="Hardware">Hardware Fault / Breakdown</option>
-                                <option value="Software">Software & OS Issue</option>
-                                <option value="Network">Network & Connectivity</option>
-                                <option value="Maintenance">Preventive Maintenance Request</option>
-                                <option value="Access">User Account & Permissions</option>
+                            <select asp-for="Type" id="ticketTypeSelect" class="form-select" required>
+                                <!-- Populated dynamically by JavaScript -->
                             </select>
+                            <div class="form-text small text-muted">Specific to selected equipment / team.</div>
                         </div>
 
-                        <div class="col-md-6">
+                        <!-- Priority Level -->
+                        <div class="col-md-4">
                             <label asp-for="Priority" class="form-label fw-semibold">Priority Level</label>
                             <select asp-for="Priority" class="form-select">
                                 <option value="1">Low - General Inquiry</option>
@@ -42,29 +129,21 @@
                                 <option value="3">High - Department Bottleneck</option>
                                 <option value="4">Urgent - Clinical / Critical Service Down</option>
                             </select>
+                            <div class="form-text small text-muted">Urgency of service response.</div>
                         </div>
 
-                        <div class="col-md-6">
-                            <label asp-for="OpenedBy" class="form-label fw-semibold">Reported By</label>
-                            <select asp-for="OpenedBy" class="form-select" asp-items="ViewBag.Users" required>
-                                <option value="">-- Select Reporting User --</option>
-                            </select>
-                        </div>
+                        @if (CurrentUser.IsAdmin() || CurrentUser.IsMaintenance())
+                        {
+                            <!-- Technician Assignment (Only visible for Admin/Maintenance) -->
+                            <div class="col-md-12">
+                                <label name="assignedTechId" class="form-label fw-semibold">Assign Technician Immediately (Optional)</label>
+                                <select name="assignedTechId" class="form-select" asp-items="ViewBag.Technicians">
+                                    <option value="">-- Leave in Unassigned Queue --</option>
+                                </select>
+                            </div>
+                        }
 
-                        <div class="col-md-6">
-                            <label asp-for="OnBehalfOf" class="form-label fw-semibold">On Behalf Of (Optional)</label>
-                            <select asp-for="OnBehalfOf" class="form-select" asp-items="ViewBag.Users">
-                                <option value="">-- Same as Reporting User --</option>
-                            </select>
-                        </div>
-
-                        <div class="col-md-12">
-                            <label name="assignedTechId" class="form-label fw-semibold">Assign Technician Immediately (Optional)</label>
-                            <select name="assignedTechId" class="form-select" asp-items="ViewBag.Technicians">
-                                <option value="">-- Leave in Unassigned Queue --</option>
-                            </select>
-                        </div>
-
+                        <!-- Issue Description & Message -->
                         <div class="col-12">
                             <label class="form-label fw-semibold">Issue Description & Symptoms</label>
                             <textarea name="initialMessage" class="form-control" rows="4" placeholder="Detail error messages, physical damage, symptoms, or steps to reproduce..." required></textarea>
@@ -73,10 +152,166 @@
 
                     <div class="d-flex justify-content-end gap-2 border-top pt-3">
                         <a href="@Url.Action("Index")" class="btn btn-outline-secondary">Cancel</a>
-                        <button type="submit" class="btn btn-primary px-4">Submit Ticket</button>
+                        <button type="submit" class="btn btn-primary px-4 fw-bold">
+                            <i class="fa-solid fa-paper-plane me-1"></i> Submit Ticket
+                        </button>
                     </div>
                 </form>
             </div>
         </div>
     </div>
 </div>
+
+@section Scripts {
+<script>
+    document.addEventListener("DOMContentLoaded", function () {
+        const currentUserId = @currentUserId;
+        const onBehalfSelect = document.getElementById("OnBehalfOf");
+        const myAssetsContainer = document.getElementById("myAssetsContainer");
+        const onBehalfAssetContainer = document.getElementById("onBehalfAssetContainer");
+        const assetSelect = document.getElementById("AssetId");
+        const manualAssetInput = document.getElementById("manualAssetInput");
+
+        const hiddenTargetTeam = document.getElementById("hiddenTargetTeam");
+        const lockedTeamContainer = document.getElementById("lockedTeamContainer");
+        const lockedTeamText = document.getElementById("lockedTeamText");
+        const selectableTeamContainer = document.getElementById("selectableTeamContainer");
+        const selectTargetTeam = document.getElementById("selectTargetTeam");
+        const ticketTypeSelect = document.getElementById("ticketTypeSelect");
+
+        // Rich issue categories organized by maintenance team
+        const categoriesByTeam = {
+            "IT": [
+                { value: "Hardware Breakdown", label: "Hardware Fault / Breakdown / No Power" },
+                { value: "OS & Software Crash", label: "OS / Windows Crash / Blue Screen / App Errors" },
+                { value: "Network & Connectivity", label: "Network & Internet / LAN / Wi-Fi / IP Conflict" },
+                { value: "Account & Password", label: "User Account / Domain Login / Permissions / Password" },
+                { value: "Printer & Peripherals", label: "Printer / Scanner / Barcode Reader / Display" },
+                { value: "Server & Storage", label: "Server / Shared Folder / NAS / Cloud Access" },
+                { value: "Cybersecurity Alert", label: "Antivirus Alert / Malware / Suspicious Activity" },
+                { value: "Data Backup & Recovery", label: "File Recovery / Backup Restoration" },
+                { value: "Preventive IT Inspection", label: "Preventive IT Inspection / Workstation Servicing" }
+            ],
+            "BIOMEDICAL": [
+                { value: "Patient Monitor / Sensor", label: "Patient Monitor / ECG / SpO2 / NIBP Sensor Error" },
+                { value: "Ventilator Alarm / Flow", label: "Ventilator Flow / Gas Pressure / Sensor Alarm" },
+                { value: "Defibrillator / Pacing", label: "Defibrillator Battery / Shock / Pacing Failure" },
+                { value: "Ultrasound / Probe", label: "Ultrasound Probe Damage / Image Artifact / Transducer" },
+                { value: "X-Ray & Imaging Unit", label: "X-Ray / Generator / Exposure Warning / Radiation Detector" },
+                { value: "Infusion & Syringe Pump", label: "Infusion Pump / Occlusion / Flow Rate Calibration" },
+                { value: "Dialysis System Error", label: "Dialysis Machine / Fluidics / Conductivity Alarm" },
+                { value: "Surgical Diathermy", label: "Electrosurgical Unit / Diathermy Plate Contact" },
+                { value: "Sensor & Device Calibration", label: "Transducer & Gauge Zero Calibration" },
+                { value: "Periodic Safety Inspection", label: "Periodic Biomedical Safety & Electrical Leakage (PM)" }
+            ],
+            "GENERAL": [
+                { value: "HVAC & Temperature", label: "HVAC / Air Conditioning / Chiller / Room Overheating" },
+                { value: "Cleanroom HEPA & Pressure", label: "Cleanroom / Negative Pressure / HEPA Filter Drop" },
+                { value: "Emergency Generator & ATS", label: "Emergency Generator / Auto Transfer Switch / ATS Test" },
+                { value: "Central UPS & Clean Power", label: "Central Medical UPS / Voltage Fluctuation" },
+                { value: "Medical Gas & Vacuum", label: "Medical Gas / Oxygen / Medical Air / Vacuum Pressure" },
+                { value: "Plumbing & Water Supply", label: "Plumbing / Pipe Leak / Drainage / Reverse Osmosis Water" },
+                { value: "Fire Alarm & Sprinklers", label: "Fire Alarm System / Smoke Detector / Sprinkler Warning" },
+                { value: "Electrical Power & Outlets", label: "Electrical Outlets / Circuit Breaker / Lighting Fixture" },
+                { value: "Door Access & Security", label: "Automated Doors / Access Control / Keycard / Physical Lock" },
+                { value: "Facility Structural Repairs", label: "Ceiling / Wall / Floor / Architectural Repair" },
+                { value: "Plant Room & Boiler", label: "Boiler / Steam Line / Pump & Plant Room Check" }
+            ]
+        };
+
+        function getTeamFriendlyName(teamKey) {
+            switch ((teamKey || "").toUpperCase()) {
+                case "BIOMEDICAL": return "Biomedical Engineering";
+                case "GENERAL": return "General Facility Maintenance";
+                default: return "IT Maintenance";
+            }
+        }
+
+        function populateCategories(team) {
+            const normalizedTeam = (team || "IT").toUpperCase();
+            const list = categoriesByTeam[normalizedTeam] || categoriesByTeam["IT"];
+            const currentSelected = ticketTypeSelect.value;
+
+            ticketTypeSelect.innerHTML = "";
+            let matched = false;
+
+            list.forEach((item, idx) => {
+                const opt = document.createElement("option");
+                opt.value = item.value;
+                opt.textContent = item.label;
+                if (item.value === currentSelected || idx === 0) {
+                    opt.selected = true;
+                    matched = true;
+                }
+                ticketTypeSelect.appendChild(opt);
+            });
+        }
+
+        function syncTeamAndCategories() {
+            let activeTeam = "IT";
+            let hasAsset = false;
+
+            if (assetSelect && assetSelect.value) {
+                const selectedOpt = assetSelect.options[assetSelect.selectedIndex];
+                const teamData = selectedOpt ? selectedOpt.getAttribute("data-team") : null;
+                if (teamData) {
+                    activeTeam = teamData.toUpperCase();
+                    hasAsset = true;
+                }
+            }
+
+            if (hasAsset) {
+                // Asset is selected: LOCK target team to asset's team
+                lockedTeamContainer.style.display = "block";
+                selectableTeamContainer.style.display = "none";
+                lockedTeamText.value = getTeamFriendlyName(activeTeam);
+                hiddenTargetTeam.value = activeTeam;
+            } else {
+                // No asset selected (General Request or On Behalf): Allow user to pick target team
+                lockedTeamContainer.style.display = "none";
+                selectableTeamContainer.style.display = "block";
+                activeTeam = (selectTargetTeam.value || "IT").toUpperCase();
+                hiddenTargetTeam.value = activeTeam;
+            }
+
+            // Dynamically update categories to match team
+            populateCategories(activeTeam);
+        }
+
+        function updateAssetMode() {
+            const selectedVal = parseInt(onBehalfSelect.value, 10);
+            const isOnBehalf = (selectedVal && selectedVal !== currentUserId);
+
+            if (isOnBehalf) {
+                myAssetsContainer.style.display = "none";
+                onBehalfAssetContainer.style.display = "block";
+                if (assetSelect) assetSelect.value = "";
+            } else {
+                myAssetsContainer.style.display = "block";
+                onBehalfAssetContainer.style.display = "none";
+                if (manualAssetInput) manualAssetInput.value = "";
+            }
+
+            syncTeamAndCategories();
+        }
+
+        if (onBehalfSelect) {
+            onBehalfSelect.addEventListener("change", updateAssetMode);
+        }
+
+        if (assetSelect) {
+            assetSelect.addEventListener("change", syncTeamAndCategories);
+        }
+
+        if (selectTargetTeam) {
+            selectTargetTeam.addEventListener("change", function () {
+                hiddenTargetTeam.value = selectTargetTeam.value.toUpperCase();
+                populateCategories(selectTargetTeam.value);
+            });
+        }
+
+        // Initialize state
+        updateAssetMode();
+    });
+</script>
+}

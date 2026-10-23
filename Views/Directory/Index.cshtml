@@ -60,9 +60,10 @@
                                 <th>Full Name</th>
                                 <th>PC / Windows Username</th>
                                 <th>Department</th>
-                                <th>Role / Title</th>
+                                <th>System Role</th>
+                                <th>Maintenance Team</th>
                                 <th>Auto-Login Status</th>
-                                <th class="text-end">Action</th>
+                                <th class="text-end">Actions</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -73,7 +74,32 @@
                                     <td class="fw-semibold">@u.FullName</td>
                                     <td><code class="text-primary fw-bold bg-light px-2 py-1 rounded">@(u.DomainUser ?? "-")</code></td>
                                     <td>@(u.Department?.Name ?? "Unassigned")</td>
-                                    <td>@u.Role</td>
+                                    <td>
+                                        @switch (u.Role?.ToUpperInvariant())
+                                        {
+                                            case "ADMIN":
+                                                <span class="badge bg-danger"><i class="fa-solid fa-shield-halved me-1"></i> ADMIN</span>
+                                                break;
+                                            case "MAINTENANCE":
+                                                <span class="badge bg-primary"><i class="fa-solid fa-wrench me-1"></i> MAINTENANCE</span>
+                                                break;
+                                            default:
+                                                <span class="badge bg-secondary"><i class="fa-solid fa-user me-1"></i> END_USER</span>
+                                                break;
+                                        }
+                                    </td>
+                                    <td>
+                                        @if (u.Role?.ToUpperInvariant() == "MAINTENANCE")
+                                        {
+                                            <span class="badge @(u.MaintenanceTeam == "BIOMEDICAL" ? "bg-info text-dark" : u.MaintenanceTeam == "GENERAL" ? "bg-warning text-dark" : "bg-dark")">
+                                                @(u.MaintenanceTeam ?? "IT")
+                                            </span>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-muted small">-</span>
+                                        }
+                                    </td>
                                     <td>
                                         @if (u.IsActive == true)
                                         {
@@ -89,6 +115,9 @@
                                         }
                                     </td>
                                     <td class="text-end">
+                                        <button type="button" class="btn btn-sm btn-outline-primary me-1" data-bs-toggle="modal" data-bs-target="#editRoleModal-@u.Id" title="Edit Role & Maintenance Team">
+                                            <i class="fa-solid fa-user-gear"></i> Role
+                                        </button>
                                         <form asp-action="ToggleUserStatus" method="post" class="d-inline">
                                             @Html.AntiForgeryToken()
                                             <input type="hidden" name="id" value="@u.Id" />
@@ -96,6 +125,45 @@
                                                 @(u.IsActive == true ? "Deactivate" : "Activate")
                                             </button>
                                         </form>
+
+                                        <!-- Modal: Edit Role & Team -->
+                                        <div class="modal fade text-start" id="editRoleModal-@u.Id" tabindex="-1">
+                                            <div class="modal-dialog">
+                                                <div class="modal-content">
+                                                    <form asp-action="UpdateUserRole" method="post">
+                                                        @Html.AntiForgeryToken()
+                                                        <input type="hidden" name="id" value="@u.Id" />
+                                                        <div class="modal-header">
+                                                            <h5 class="modal-title fw-bold">Manage Role & Team: @u.FullName</h5>
+                                                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                                        </div>
+                                                        <div class="modal-body">
+                                                            <div class="mb-3">
+                                                                <label class="form-label fw-semibold">System RBAC Role</label>
+                                                                <select name="role" id="role-select-@u.Id" class="form-select" onchange="toggleTeamSelect(@u.Id)">
+                                                                    <option value="ADMIN" selected="@(u.Role?.ToUpperInvariant() == "ADMIN")">ADMIN (Full System Access)</option>
+                                                                    <option value="MAINTENANCE" selected="@(u.Role?.ToUpperInvariant() == "MAINTENANCE")">MAINTENANCE (Assigned Maintenance Team)</option>
+                                                                    <option value="END_USER" selected="@(u.Role?.ToUpperInvariant() == "END_USER" || string.IsNullOrWhiteSpace(u.Role))">END_USER (Standard Staff)</option>
+                                                                </select>
+                                                            </div>
+                                                            <div class="mb-3" id="team-container-@u.Id" style="@(u.Role?.ToUpperInvariant() == "MAINTENANCE" ? "" : "display:none;")">
+                                                                <label class="form-label fw-semibold">Assigned Maintenance Team</label>
+                                                                <select name="maintenanceTeam" class="form-select">
+                                                                    <option value="IT" selected="@(u.MaintenanceTeam == "IT" || string.IsNullOrWhiteSpace(u.MaintenanceTeam))">IT</option>
+                                                                    <option value="BIOMEDICAL" selected="@(u.MaintenanceTeam == "BIOMEDICAL")">BIOMEDICAL</option>
+                                                                    <option value="GENERAL" selected="@(u.MaintenanceTeam == "GENERAL")">GENERAL</option>
+                                                                </select>
+                                                                <div class="form-text small">Maintenance users can view and handle tickets directed to their team only.</div>
+                                                            </div>
+                                                        </div>
+                                                        <div class="modal-footer">
+                                                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                                            <button type="submit" class="btn btn-primary">Save Role & Team</button>
+                                                        </div>
+                                                    </form>
+                                                </div>
+                                            </div>
+                                        </div>
                                     </td>
                                 </tr>
                             }
@@ -261,8 +329,20 @@
                         </div>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label fw-semibold">Role / Job Title</label>
-                        <input type="text" name="Role" class="form-control" placeholder="e.g. Technician, Doctor, Specialist" />
+                        <label class="form-label fw-semibold">System RBAC Role <span class="text-danger">*</span></label>
+                        <select name="Role" id="newRoleSelect" class="form-select" onchange="toggleNewUserTeam()">
+                            <option value="END_USER" selected>END_USER (Standard Staff)</option>
+                            <option value="MAINTENANCE">MAINTENANCE (Assigned Maintenance Team)</option>
+                            <option value="ADMIN">ADMIN (Full System Access)</option>
+                        </select>
+                    </div>
+                    <div class="mb-3" id="newUserTeamContainer" style="display: none;">
+                        <label class="form-label fw-semibold">Assigned Maintenance Team</label>
+                        <select name="MaintenanceTeam" class="form-select">
+                            <option value="IT" selected>IT</option>
+                            <option value="BIOMEDICAL">BIOMEDICAL</option>
+                            <option value="GENERAL">GENERAL</option>
+                        </select>
                     </div>
                     <div class="mb-3">
                         <label class="form-label fw-semibold">Department</label>
@@ -370,3 +450,23 @@
         </div>
     </div>
 </div>
+
+@section Scripts {
+<script>
+    function toggleTeamSelect(userId) {
+        var roleSelect = document.getElementById('role-select-' + userId);
+        var container = document.getElementById('team-container-' + userId);
+        if (roleSelect && container) {
+            container.style.display = (roleSelect.value === 'MAINTENANCE') ? 'block' : 'none';
+        }
+    }
+
+    function toggleNewUserTeam() {
+        var roleSelect = document.getElementById('newRoleSelect');
+        var container = document.getElementById('newUserTeamContainer');
+        if (roleSelect && container) {
+            container.style.display = (roleSelect.value === 'MAINTENANCE') ? 'block' : 'none';
+        }
+    }
+</script>
+}

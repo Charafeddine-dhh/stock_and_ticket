@@ -218,53 +218,124 @@
             catch {}
         }
         <ul class="sidebar-nav">
-            <li class="nav-category">Operations</li>
-            <li>
-                <a href="@Url.Action("Index", "Home")" class="nav-link @(ViewContext.RouteData.Values["Controller"]?.ToString() == "Home" ? "active" : "")">
-                    <i class="fa-solid fa-chart-pie"></i>
-                    <span>Dashboard</span>
-                </a>
-            </li>
-            <li>
-                <a href="@Url.Action("Index", "Assets")" class="nav-link @(ViewContext.RouteData.Values["Controller"]?.ToString() == "Assets" ? "active" : "")">
-                    <i class="fa-solid fa-boxes-stacked"></i>
-                    <span>Stock & Assets</span>
-                </a>
-            </li>
-            <li>
-                <a href="@Url.Action("Index", "Tickets")" class="nav-link @(ViewContext.RouteData.Values["Controller"]?.ToString() == "Tickets" ? "active" : "")">
-                    <i class="fa-solid fa-ticket"></i>
-                    <span class="flex-grow-1">Tickets & Helpdesk</span>
-                    @if (openTicketsCount > 0)
-                    {
-                        <span class="badge bg-danger rounded-pill" style="font-size: 0.7rem;">@openTicketsCount</span>
-                    }
-                </a>
-            </li>
-            <li>
-                <a href="@Url.Action("Index", "Maintenance")" class="nav-link @(ViewContext.RouteData.Values["Controller"]?.ToString() == "Maintenance" ? "active" : "")">
-                    <i class="fa-solid fa-screwdriver-wrench"></i>
-                    <span class="flex-grow-1">Maintenance</span>
-                    @if (overdueMaintCount > 0)
-                    {
-                        <span class="badge bg-warning text-dark rounded-pill" style="font-size: 0.7rem;">@overdueMaintCount</span>
-                    }
-                </a>
-            </li>
+            @if (CurrentUser.IsAdmin())
+            {
+                <li class="nav-category">Operations</li>
+                <li>
+                    <a href="@Url.Action("Index", "Home")" class="nav-link @(ViewContext.RouteData.Values["Controller"]?.ToString() == "Home" ? "active" : "")">
+                        <i class="fa-solid fa-chart-pie"></i>
+                        <span>Dashboard</span>
+                    </a>
+                </li>
+                <li>
+                    <a href="@Url.Action("Index", "Assets")" class="nav-link @(ViewContext.RouteData.Values["Controller"]?.ToString() == "Assets" ? "active" : "")">
+                        <i class="fa-solid fa-boxes-stacked"></i>
+                        <span>Stock & Assets</span>
+                    </a>
+                </li>
+                <li>
+                    <a href="@Url.Action("Index", "Tickets")" class="nav-link @(ViewContext.RouteData.Values["Controller"]?.ToString() == "Tickets" ? "active" : "")">
+                        <i class="fa-solid fa-ticket"></i>
+                        <span class="flex-grow-1">Tickets & Helpdesk</span>
+                        @if (openTicketsCount > 0)
+                        {
+                            <span class="badge bg-danger rounded-pill" style="font-size: 0.7rem;">@openTicketsCount</span>
+                        }
+                    </a>
+                </li>
+                <li>
+                    <a href="@Url.Action("Index", "Maintenance")" class="nav-link @(ViewContext.RouteData.Values["Controller"]?.ToString() == "Maintenance" ? "active" : "")">
+                        <i class="fa-solid fa-screwdriver-wrench"></i>
+                        <span class="flex-grow-1">Maintenance</span>
+                        @if (overdueMaintCount > 0)
+                        {
+                            <span class="badge bg-warning text-dark rounded-pill" style="font-size: 0.7rem;">@overdueMaintCount</span>
+                        }
+                    </a>
+                </li>
 
-            <li class="nav-category mt-3">Administration</li>
-            <li>
-                <a href="@Url.Action("Index", "Directory")" class="nav-link @(ViewContext.RouteData.Values["Controller"]?.ToString() == "Directory" ? "active" : "")">
-                    <i class="fa-solid fa-sitemap"></i>
-                    <span>Master Directory</span>
-                </a>
-            </li>
-            <li>
-                <a href="@Url.Action("Profile", "Account")" class="nav-link @(ViewContext.RouteData.Values["Controller"]?.ToString() == "Account" ? "active" : "")">
-                    <i class="fa-solid fa-user-circle"></i>
-                    <span>My Domain Profile</span>
-                </a>
-            </li>
+                <li class="nav-category mt-3">Administration</li>
+                <li>
+                    <a href="@Url.Action("Index", "Directory")" class="nav-link @(ViewContext.RouteData.Values["Controller"]?.ToString() == "Directory" ? "active" : "")">
+                        <i class="fa-solid fa-sitemap"></i>
+                        <span>Master Directory & RBAC</span>
+                    </a>
+                </li>
+                <li>
+                    <a href="@Url.Action("Profile", "Account")" class="nav-link @(ViewContext.RouteData.Values["Controller"]?.ToString() == "Account" ? "active" : "")">
+                        <i class="fa-solid fa-user-circle"></i>
+                        <span>My Domain Profile</span>
+                    </a>
+                </li>
+            }
+            else if (CurrentUser.IsMaintenance())
+            {
+                <li class="nav-category">Engineering Queue</li>
+                <li>
+                    <a href="@Url.Action("Index", "Tickets")" class="nav-link @(ViewContext.RouteData.Values["Controller"]?.ToString() == "Tickets" ? "active" : "")">
+                        <i class="fa-solid fa-users-gear text-info"></i>
+                        <span class="flex-grow-1">@CurrentUser.GetMaintenanceTeam() Queue</span>
+                        @if (openTicketsCount > 0)
+                        {
+                            <span class="badge bg-danger rounded-pill" style="font-size: 0.7rem;">@openTicketsCount</span>
+                        }
+                    </a>
+                </li>
+                <li>
+                    <a href="@Url.Action("Index", "Assets")" class="nav-link @(ViewContext.RouteData.Values["Controller"]?.ToString() == "Assets" ? "active" : "")">
+                        <i class="fa-solid fa-boxes-stacked"></i>
+                        <span>Hospital Assets</span>
+                    </a>
+                </li>
+                <li>
+                    <a href="@Url.Action("Index", "Maintenance")" class="nav-link @(ViewContext.RouteData.Values["Controller"]?.ToString() == "Maintenance" ? "active" : "")">
+                        <i class="fa-solid fa-screwdriver-wrench"></i>
+                        <span class="flex-grow-1">Maintenance Logs</span>
+                        @if (overdueMaintCount > 0)
+                        {
+                            <span class="badge bg-warning text-dark rounded-pill" style="font-size: 0.7rem;">@overdueMaintCount</span>
+                        }
+                    </a>
+                </li>
+
+                <li class="nav-category mt-3">Account</li>
+                <li>
+                    <a href="@Url.Action("Profile", "Account")" class="nav-link @(ViewContext.RouteData.Values["Controller"]?.ToString() == "Account" ? "active" : "")">
+                        <i class="fa-solid fa-user-circle"></i>
+                        <span>My Domain Profile</span>
+                    </a>
+                </li>
+            }
+            else
+            {
+                <li class="nav-category">My Workspace</li>
+                <li>
+                    <a href="@Url.Action("Index", "Assets")" class="nav-link @(ViewContext.RouteData.Values["Controller"]?.ToString() == "Assets" ? "active" : "")">
+                        <i class="fa-solid fa-laptop text-primary"></i>
+                        <span>My Equipment</span>
+                    </a>
+                </li>
+                <li>
+                    <a href="@Url.Action("Index", "Tickets")" class="nav-link @(ViewContext.RouteData.Values["Controller"]?.ToString() == "Tickets" ? "active" : "")">
+                        <i class="fa-solid fa-ticket text-info"></i>
+                        <span>My Service Tickets</span>
+                    </a>
+                </li>
+                <li>
+                    <a href="@Url.Action("Create", "Tickets")" class="nav-link">
+                        <i class="fa-solid fa-plus-circle text-success"></i>
+                        <span>Open New Ticket</span>
+                    </a>
+                </li>
+
+                <li class="nav-category mt-3">Account</li>
+                <li>
+                    <a href="@Url.Action("Profile", "Account")" class="nav-link @(ViewContext.RouteData.Values["Controller"]?.ToString() == "Account" ? "active" : "")">
+                        <i class="fa-solid fa-user-circle"></i>
+                        <span>My Domain Profile</span>
+                    </a>
+                </li>
+            }
         </ul>
 
         <!-- Bottom Domain User Identity Badge -->
@@ -277,7 +348,7 @@
                     <div class="text-white text-truncate fw-semibold" style="font-size: 0.85rem;">@CurrentUser.GetFullName()</div>
                     <div class="text-info text-truncate d-flex align-items-center gap-1" style="font-size: 0.72rem;">
                         <i class="fa-solid fa-shield-halved" style="font-size: 0.65rem;"></i>
-                        <span>@CurrentUser.GetRole() &bull; @CurrentUser.GetDomainUser()</span>
+                        <span>@CurrentUser.GetRole() @(CurrentUser.IsMaintenance() ? $"({CurrentUser.GetMaintenanceTeam()})" : "")</span>
                     </div>
                 </div>
             </div>
@@ -306,6 +377,10 @@
                                 <div>Domain: <strong>@Environment.UserDomainName</strong></div>
                                 <div>User: <strong>@CurrentUser.GetDomainUser()</strong></div>
                                 <div>Role: <strong>@CurrentUser.GetRole()</strong></div>
+                                @if (CurrentUser.IsMaintenance())
+                                {
+                                    <div>Team: <strong>@CurrentUser.GetMaintenanceTeam()</strong></div>
+                                }
                             </div>
                         </li>
                         <li><hr class="dropdown-divider"></li>
@@ -317,9 +392,12 @@
                 <a href="@Url.Action("Create", "Tickets")" class="btn btn-outline-primary btn-sm">
                     <i class="fa-solid fa-plus me-1"></i> New Ticket
                 </a>
-                <a href="@Url.Action("Create", "Assets")" class="btn btn-primary btn-sm">
-                    <i class="fa-solid fa-plus me-1"></i> Add Asset
-                </a>
+                @if (CurrentUser.CanManageAssets())
+                {
+                    <a href="@Url.Action("Create", "Assets")" class="btn btn-primary btn-sm">
+                        <i class="fa-solid fa-plus me-1"></i> Add Asset
+                    </a>
+                }
             </div>
         </header>
 

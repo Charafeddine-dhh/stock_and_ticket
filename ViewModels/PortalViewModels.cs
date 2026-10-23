@@ -64,4 +64,25 @@ namespace StockPortal.ViewModels
         public List<Asset> UpToDateAssets { get; set; } = new();
         public List<AssetMaintenance> RecentLogs { get; set; } = new();
     }
+
+    public class AutoTicketViewModel
+    {
+        public string DetectedPcName { get; set; } = string.Empty;
+        public string ClientIp { get; set; } = string.Empty;
+        public bool IsAssetFound { get; set; }
+        public Asset? MatchedAsset { get; set; }
+
+        // Form Fields
+        public int? SelectedAssetId { get; set; }
+        public int? SelectedRoomId { get; set; }
+        public int? SelectedUserId { get; set; }
+        public string Category { get; set; } = "Hardware";
+        public int Priority { get; set; } = 2; // Medium
+        public string? UserNotes { get; set; }
+
+        // Dropdown data
+        public List<Asset> AvailableAssets { get; set; } = new();
+        public List<Room> AvailableRooms { get; set; } = new();
+        public List<User> AvailableUsers { get; set; } = new();
+    }
 }

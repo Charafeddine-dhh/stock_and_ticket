@@ -8,16 +8,19 @@ using Microsoft.EntityFrameworkCore;
 using StockPortal.Data;
 using StockPortal.Models;
 using StockPortal.ViewModels;
+using StockPortal.Services;
 
 namespace StockPortal.Controllers
 {
     public class AssetsController : Controller
     {
         private readonly StockDbContext _context;
+        private readonly ICurrentUserService _currentUserService;
 
-        public AssetsController(StockDbContext context)
+        public AssetsController(StockDbContext context, ICurrentUserService currentUserService)
         {
             _context = context;
+            _currentUserService = currentUserService;
         }
 
         // GET: Assets
@@ -29,6 +32,18 @@ namespace StockPortal.Controllers
                 .Include(a => a.Supplier)
                 .Include(a => a.CustodyType)
                 .AsQueryable();
+
+            // RBAC Guard: End users can view ONLY assets currently in their custody; Maintenance users view ONLY assets for their designated team
+            if (_currentUserService.IsEndUser())
+            {
+                int currentUserId = _currentUserService.GetUserId();
+                query = query.Where(a => a.UserId == currentUserId);
+            }
+            else if (_currentUserService.IsMaintenance())
+            {
+                var myTeam = _currentUserService.GetMaintenanceTeam();
+                query = query.Where(a => a.MaintenanceTeam == myTeam);
+            }
 
             if (!string.IsNullOrWhiteSpace(search))
             {
@@ -109,6 +124,12 @@ namespace StockPortal.Controllers
 
             if (asset == null) return NotFound();
 
+            // RBAC Guard
+            if (!_currentUserService.CanAccessAsset(asset))
+            {
+                return Forbid();
+            }
+
             var vm = new AssetDetailsViewModel
             {
                 Asset = asset,
@@ -126,12 +147,15 @@ namespace StockPortal.Controllers
         // GET: Assets/Create
         public async Task<IActionResult> Create()
         {
+            if (!_currentUserService.CanManageAssets()) return Forbid();
+
             await PopulateDropdowns();
             return View(new Asset
             {
                 Status = "In Service",
                 BuyingDate = DateTime.Now,
-                NeedsPeriodic = false
+                NeedsPeriodic = false,
+                MaintenanceTeam = MaintenanceTeams.IT
             });
         }
 
@@ -140,6 +164,8 @@ namespace StockPortal.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Create(Asset asset)
         {
+            if (!_currentUserService.CanManageAssets()) return Forbid();
+
             // Validate unique HospitalNo
             if (!string.IsNullOrWhiteSpace(asset.HospitalNo) && 
                 await _context.Assets.AnyAsync(a => a.HospitalNo == asset.HospitalNo.Trim()))
@@ -185,6 +211,7 @@ namespace StockPortal.Controllers
         // GET: Assets/Edit/5
         public async Task<IActionResult> Edit(int? id)
         {
+            if (!_currentUserService.CanManageAssets()) return Forbid();
             if (id == null) return NotFound();
 
             var asset = await _context.Assets.FindAsync(id);
@@ -199,6 +226,7 @@ namespace StockPortal.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Edit(int id, Asset asset)
         {
+            if (!_currentUserService.CanManageAssets()) return Forbid();
             if (id != asset.Id) return NotFound();
 
             // Validate unique HospitalNo if changed
@@ -245,6 +273,8 @@ namespace StockPortal.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> TransferCustody(int assetId, int newUserId, int newRoomId, int newCustodyTypeId, string? notes)
         {
+            if (!_currentUserService.CanManageAssets()) return Forbid();
+
             var asset = await _context.Assets.FindAsync(assetId);
             if (asset == null) return NotFound();
 
@@ -287,6 +317,8 @@ namespace StockPortal.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Retire(int id, string? reason)
         {
+            if (!_currentUserService.CanManageAssets()) return Forbid();
+
             var asset = await _context.Assets.FindAsync(id);
             if (asset == null) return NotFound();
 
@@ -313,6 +345,7 @@ namespace StockPortal.Controllers
         // GET: Assets/Delete/5
         public async Task<IActionResult> Delete(int? id)
         {
+            if (!_currentUserService.CanManageAssets()) return Forbid();
             if (id == null) return NotFound();
 
             var asset = await _context.Assets
@@ -332,6 +365,8 @@ namespace StockPortal.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> DeleteConfirmed(int id)
         {
+            if (!_currentUserService.CanManageAssets()) return Forbid();
+
             var asset = await _context.Assets
                 .Include(a => a.Tickets)
                 .Include(a => a.MaintenanceRecords)
@@ -370,6 +405,8 @@ namespace StockPortal.Controllers
 
             if (asset == null) return NotFound();
 
+            if (!_currentUserService.CanAccessAsset(asset)) return Forbid();
+
             return View(asset);
         }
 
@@ -382,6 +419,17 @@ namespace StockPortal.Controllers
                 .Include(a => a.Supplier)
                 .Include(a => a.CustodyType)
                 .AsQueryable();
+
+            if (_currentUserService.IsEndUser())
+            {
+                int currentUserId = _currentUserService.GetUserId();
+                query = query.Where(a => a.UserId == currentUserId);
+            }
+            else if (_currentUserService.IsMaintenance())
+            {
+                var myTeam = _currentUserService.GetMaintenanceTeam();
+                query = query.Where(a => a.MaintenanceTeam == myTeam);
+            }
 
             if (!string.IsNullOrWhiteSpace(search))
             {
@@ -402,11 +450,11 @@ namespace StockPortal.Controllers
             var assets = await query.OrderBy(a => a.Id).ToListAsync();
 
             var sb = new StringBuilder();
-            sb.AppendLine("ID,Hospital Tag,Serial Number,Brand,Model,Type,Status,Room Location,Custodian,Custody Type,Supplier,Price,Buying Date,Warranty Expiration,Needs Periodic,Next Periodic");
+            sb.AppendLine("ID,Hospital Tag,Maintenance Team,Serial Number,Brand,Model,Type,Status,Room Location,Custodian,Custody Type,Supplier,Price,Buying Date,Warranty Expiration,Needs Periodic,Next Periodic");
 
             foreach (var a in assets)
             {
-                sb.AppendLine($"\"{a.Id}\",\"{EscapeCsv(a.HospitalNo)}\",\"{EscapeCsv(a.SerialNo)}\",\"{EscapeCsv(a.Brand)}\",\"{a.ModelNo}\",\"{EscapeCsv(a.Type)}\",\"{EscapeCsv(a.Status)}\",\"{EscapeCsv(a.Room?.DisplayName)}\",\"{EscapeCsv(a.User?.FullName)}\",\"{EscapeCsv(a.CustodyType?.Type)}\",\"{EscapeCsv(a.Supplier?.Name)}\",\"{a.Price:F2}\",\"{a.BuyingDate:yyyy-MM-dd}\",\"{a.WarrantyTill:yyyy-MM-dd}\",\"{(a.NeedsPeriodic == true ? "Yes" : "No")}\",\"{a.NextPeriodic:yyyy-MM-dd}\"");
+                sb.AppendLine($"\"{a.Id}\",\"{EscapeCsv(a.HospitalNo)}\",\"{EscapeCsv(a.MaintenanceTeam)}\",\"{EscapeCsv(a.SerialNo)}\",\"{EscapeCsv(a.Brand)}\",\"{a.ModelNo}\",\"{EscapeCsv(a.Type)}\",\"{EscapeCsv(a.Status)}\",\"{EscapeCsv(a.Room?.DisplayName)}\",\"{EscapeCsv(a.User?.FullName)}\",\"{EscapeCsv(a.CustodyType?.Type)}\",\"{EscapeCsv(a.Supplier?.Name)}\",\"{a.Price:F2}\",\"{a.BuyingDate:yyyy-MM-dd}\",\"{a.WarrantyTill:yyyy-MM-dd}\",\"{(a.NeedsPeriodic == true ? "Yes" : "No")}\",\"{a.NextPeriodic:yyyy-MM-dd}\"");
             }
 
             var bytes = Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(sb.ToString())).ToArray();
@@ -425,6 +473,7 @@ namespace StockPortal.Controllers
             ViewBag.Rooms = new SelectList(await _context.Rooms.OrderBy(r => r.Floor).ThenBy(r => r.RoomNo).ToListAsync(), "Id", "DisplayName", asset?.RoomId);
             ViewBag.Suppliers = new SelectList(await _context.Suppliers.Where(s => s.IsActive == true).OrderBy(s => s.Name).ToListAsync(), "Id", "Name", asset?.SupplierId);
             ViewBag.CustodyTypes = new SelectList(await _context.CustodyTypes.ToListAsync(), "Id", "Type", asset?.CustodyTypeId);
+            ViewBag.MaintenanceTeams = new SelectList(MaintenanceTeams.All, asset?.MaintenanceTeam ?? MaintenanceTeams.IT);
         }
     }
 }

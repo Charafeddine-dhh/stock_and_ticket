@@ -1,7 +1,10 @@
 @model StockPortal.ViewModels.TicketDetailsViewModel
+@inject StockPortal.Services.ICurrentUserService CurrentUser
 @{
     ViewData["Title"] = $"Ticket #{Model.Ticket.Id}: {Model.Ticket.Type}";
     var ticket = Model.Ticket;
+    bool isClosed = ticket.StatusId == 5 || ticket.ClosedDT.HasValue;
+    bool canManage = CurrentUser.CanManageTicket(ticket);
 }
 
 <div class="d-flex justify-content-between align-items-center mb-4">
@@ -12,8 +15,9 @@
                 <li class="breadcrumb-item active" aria-current="page">Ticket #@ticket.Id</li>
             </ol>
         </nav>
-        <div class="d-flex align-items-center gap-2">
+        <div class="d-flex align-items-center gap-2 flex-wrap">
             <h3 class="fw-bold mb-0">Ticket #@ticket.Id &bull; @ticket.Type Issue</h3>
+            <span class="badge bg-primary fs-6"><i class="fa-solid fa-users-gear me-1"></i> @ticket.TargetTeam</span>
             @switch (ticket.Priority)
             {
                 case 4: <span class="badge bg-danger fs-6"><i class="fa-solid fa-fire me-1"></i> Urgent</span>; break;
@@ -21,26 +25,41 @@
                 case 2: <span class="badge bg-info text-dark fs-6">Medium</span>; break;
                 default: <span class="badge bg-secondary fs-6">Low</span>; break;
             }
+            @if (isClosed)
+            {
+                <span class="badge bg-success fs-6"><i class="fa-solid fa-lock me-1"></i> Closed</span>
+            }
         </div>
     </div>
     <div class="d-flex gap-2">
         <a href="@Url.Action("PrintTicket", new { id = ticket.Id })" class="btn btn-outline-dark" target="_blank">
             <i class="fa-solid fa-print me-1"></i> Print Work Order
         </a>
-        @if (ticket.StatusId != 5)
+        @if (!isClosed && canManage)
         {
             <button type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#closeTicketModal">
                 <i class="fa-solid fa-check-double me-1"></i> Resolve & Close
             </button>
+            <button type="button" class="btn btn-warning text-dark" data-bs-toggle="modal" data-bs-target="#maintenanceModal">
+                <i class="fa-solid fa-wrench me-1"></i> Log Maintenance Work
+            </button>
         }
-        <button type="button" class="btn btn-warning text-dark" data-bs-toggle="modal" data-bs-target="#maintenanceModal">
-            <i class="fa-solid fa-wrench me-1"></i> Log Maintenance Work
-        </button>
         <a href="@Url.Action("Index")" class="btn btn-outline-secondary">
             <i class="fa-solid fa-arrow-left me-1"></i> Back to Queue
         </a>
     </div>
 </div>
+
+@if (isClosed && !string.IsNullOrWhiteSpace(ticket.ResolutionDetails))
+{
+    <div class="alert alert-success border-0 shadow-sm d-flex align-items-start gap-3 mb-4">
+        <i class="fa-solid fa-circle-check fs-3 mt-1 text-success"></i>
+        <div>
+            <h6 class="fw-bold mb-1">Issue Resolved & Ticket Closed on @ticket.ClosedDT?.ToString("MMM dd, yyyy HH:mm")</h6>
+            <p class="mb-0 text-dark" style="white-space: pre-wrap;">@ticket.ResolutionDetails</p>
+        </div>
+    </div>
+}
 
 <div class="row g-4 mb-4">
     <!-- Left Column: Discussion & Messages Timeline -->
@@ -80,32 +99,53 @@
                     </div>
                 }
 
-                <!-- Post Message Form -->
+                <!-- Post Message Form or Closed Notice -->
                 <div class="border-top pt-3 mt-4">
-                    <form asp-action="AddMessage" method="post">
-                        @Html.AntiForgeryToken()
-                        <input type="hidden" name="ticketId" value="@ticket.Id" />
-                        <div class="row g-2 align-items-end">
-                            <div class="col-md-4">
-                                <label class="form-label small fw-semibold text-muted">Post as User / Technician</label>
-                                <select name="userId" class="form-select form-select-sm" required>
-                                    @foreach (var tech in Model.Technicians)
-                                    {
-                                        <option value="@tech.Id" selected="@(tech.Id == (ticket.Handler?.TechUserId ?? 1))">@tech.FullName (@tech.Role)</option>
-                                    }
-                                </select>
-                            </div>
-                            <div class="col-md-8">
-                                <label class="form-label small fw-semibold text-muted">Add Note / Progress Update</label>
-                                <div class="input-group">
-                                    <textarea name="msg" class="form-control" rows="2" placeholder="Write reply or technician progress note..." required></textarea>
-                                    <button type="submit" class="btn btn-primary px-3">
-                                        <i class="fa-solid fa-paper-plane me-1"></i> Send
-                                    </button>
-                                </div>
+                    @if (isClosed)
+                    {
+                        <div class="alert alert-secondary d-flex align-items-center gap-3 mb-0 py-3">
+                            <i class="fa-solid fa-lock text-muted fs-4"></i>
+                            <div>
+                                <div class="fw-bold text-dark">Discussion Locked</div>
+                                <div class="small text-muted">This ticket has been resolved and closed. New messages cannot be submitted.</div>
                             </div>
                         </div>
-                    </form>
+                    }
+                    else
+                    {
+                        <form asp-action="AddMessage" method="post">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="ticketId" value="@ticket.Id" />
+                            <div class="row g-2 align-items-end">
+                                <div class="col-md-4">
+                                    <label class="form-label small fw-semibold text-muted">Post As</label>
+                                    @if (CurrentUser.IsAdmin() || CurrentUser.IsMaintenance())
+                                    {
+                                        <select name="userId" class="form-select form-select-sm" required>
+                                            @foreach (var tech in Model.Technicians)
+                                            {
+                                                <option value="@tech.Id" selected="@(tech.Id == CurrentUser.GetUserId())">@tech.FullName (@tech.Role)</option>
+                                            }
+                                        </select>
+                                    }
+                                    else
+                                    {
+                                        <input type="hidden" name="userId" value="@CurrentUser.GetUserId()" />
+                                        <input type="text" class="form-control form-control-sm bg-light" value="@CurrentUser.GetFullName()" readonly />
+                                    }
+                                </div>
+                                <div class="col-md-8">
+                                    <label class="form-label small fw-semibold text-muted">Add Note / Progress Update</label>
+                                    <div class="input-group">
+                                        <textarea name="msg" class="form-control" rows="2" placeholder="Write reply or technician progress note..." required></textarea>
+                                        <button type="submit" class="btn btn-primary px-3">
+                                            <i class="fa-solid fa-paper-plane me-1"></i> Send
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </form>
+                    }
                 </div>
             </div>
         </div>
@@ -153,41 +193,75 @@
         <!-- Ticket Controls -->
         <div class="card shadow-sm border-0 mb-4">
             <div class="card-header bg-white">
-                <h6 class="mb-0 fw-bold"><i class="fa-solid fa-sliders text-primary me-2"></i> Ticket Management</h6>
+                <h6 class="mb-0 fw-bold"><i class="fa-solid fa-sliders text-primary me-2"></i> Ticket Details & Management</h6>
             </div>
             <div class="card-body">
-                <!-- Status Updater Form -->
-                <form asp-action="UpdateStatus" method="post" class="mb-3">
-                    @Html.AntiForgeryToken()
-                    <input type="hidden" name="ticketId" value="@ticket.Id" />
-                    <label class="form-label small fw-semibold text-muted">Ticket Status</label>
-                    <div class="input-group">
-                        <select name="statusId" class="form-select">
-                            @foreach (var st in Model.Statuses)
-                            {
-                                <option value="@st.Id" selected="@(st.Id == ticket.StatusId)">@st.Status</option>
-                            }
-                        </select>
-                        <button type="submit" class="btn btn-outline-primary">Update</button>
+                <!-- Target Team -->
+                <div class="mb-3">
+                    <label class="form-label small fw-semibold text-muted">Assigned Maintenance Team</label>
+                    <div>
+                        <span class="badge bg-primary fs-6"><i class="fa-solid fa-users-gear me-1"></i> @ticket.TargetTeam Team</span>
                     </div>
-                </form>
+                </div>
 
-                <!-- Technician Assignment Form -->
-                <form asp-action="AssignTechnician" method="post" class="mb-3">
-                    @Html.AntiForgeryToken()
-                    <input type="hidden" name="ticketId" value="@ticket.Id" />
-                    <label class="form-label small fw-semibold text-muted">Assigned Technician</label>
-                    <div class="input-group">
-                        <select name="techUserId" class="form-select">
-                            <option value="">-- Unassigned --</option>
-                            @foreach (var tech in Model.Technicians)
+                @if (canManage && !isClosed)
+                {
+                    <!-- Status Updater Form -->
+                    <form asp-action="UpdateStatus" method="post" class="mb-3">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="ticketId" value="@ticket.Id" />
+                        <label class="form-label small fw-semibold text-muted">Ticket Status</label>
+                        <div class="input-group">
+                            <select name="statusId" class="form-select">
+                                @foreach (var st in Model.Statuses)
+                                {
+                                    <option value="@st.Id" selected="@(st.Id == ticket.StatusId)">@st.Status</option>
+                                }
+                            </select>
+                            <button type="submit" class="btn btn-outline-primary">Update</button>
+                        </div>
+                    </form>
+
+                    <!-- Technician Assignment Form -->
+                    <form asp-action="AssignTechnician" method="post" class="mb-3">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="ticketId" value="@ticket.Id" />
+                        <label class="form-label small fw-semibold text-muted">Assigned Technician</label>
+                        <div class="input-group">
+                            <select name="techUserId" class="form-select">
+                                <option value="">-- Unassigned --</option>
+                                @foreach (var tech in Model.Technicians)
+                                {
+                                    <option value="@tech.Id" selected="@(tech.Id == ticket.Handler?.TechUserId)">@tech.FullName (@tech.Role)</option>
+                                }
+                            </select>
+                            <button type="submit" class="btn btn-outline-primary">Assign</button>
+                        </div>
+                    </form>
+                }
+                else
+                {
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold text-muted">Status</label>
+                        <div>
+                            @if (isClosed)
                             {
-                                <option value="@tech.Id" selected="@(tech.Id == ticket.Handler?.TechUserId)">@tech.FullName</option>
+                                <span class="badge bg-success fs-6"><i class="fa-solid fa-check me-1"></i> Closed / Resolved</span>
                             }
-                        </select>
-                        <button type="submit" class="btn btn-outline-primary">Assign</button>
+                            else
+                            {
+                                <span class="badge bg-info text-dark fs-6">@(ticket.Status?.Status ?? "Open")</span>
+                            }
+                        </div>
                     </div>
-                </form>
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold text-muted">Assigned Technician</label>
+                        <div class="fw-semibold text-dark">
+                            <i class="fa-solid fa-user-gear text-secondary me-1"></i>
+                            @(ticket.Handler?.TechUser?.FullName ?? "Unassigned")
+                        </div>
+                    </div>
+                }
 
                 <div class="pt-2 border-top small">
                     <div class="d-flex justify-content-between text-muted mb-1">
@@ -251,94 +325,97 @@
     </div>
 </div>
 
-<!-- Modal: Log Maintenance from Ticket -->
-<div class="modal fade" id="maintenanceModal" tabindex="-1" aria-labelledby="maintenanceModalLabel" aria-hidden="true">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <form asp-action="LogMaintenance" method="post">
-                @Html.AntiForgeryToken()
-                <input type="hidden" name="ticketId" value="@ticket.Id" />
-                <input type="hidden" name="assetId" value="@(ticket.AssetId ?? 1)" />
+@if (!isClosed && canManage)
+{
+    <!-- Modal: Log Maintenance from Ticket -->
+    <div class="modal fade" id="maintenanceModal" tabindex="-1" aria-labelledby="maintenanceModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <form asp-action="LogMaintenance" method="post">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="ticketId" value="@ticket.Id" />
+                    <input type="hidden" name="assetId" value="@(ticket.AssetId ?? 1)" />
 
-                <div class="modal-header">
-                    <h5 class="modal-title fw-bold" id="maintenanceModalLabel">Log Maintenance Work Order</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold">Maintenance Type</label>
-                        <select name="maintenanceType" class="form-select">
-                            <option value="1">Breakdown / Corrective Repair</option>
-                            <option value="2">Preventive / Periodic Inspection</option>
-                        </select>
+                    <div class="modal-header">
+                        <h5 class="modal-title fw-bold" id="maintenanceModalLabel">Log Maintenance Work Order</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                     </div>
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Maintenance Type</label>
+                            <select name="maintenanceType" class="form-select">
+                                <option value="1">Breakdown / Corrective Repair</option>
+                                <option value="2">Preventive / Periodic Inspection</option>
+                            </select>
+                        </div>
 
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold">Technician in Charge</label>
-                        <select name="technicianId" class="form-select" required>
-                            @foreach (var tech in Model.Technicians)
-                            {
-                                <option value="@tech.Id" selected="@(tech.Id == (ticket.Handler?.TechUserId ?? 1))">@tech.FullName (@tech.Role)</option>
-                            }
-                        </select>
-                    </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Technician in Charge</label>
+                            <select name="technicianId" class="form-select" required>
+                                @foreach (var tech in Model.Technicians)
+                                {
+                                    <option value="@tech.Id" selected="@(tech.Id == (ticket.Handler?.TechUserId ?? 1))">@tech.FullName (@tech.Role)</option>
+                                }
+                            </select>
+                        </div>
 
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold">Contractor / Supplier (Optional)</label>
-                        <select name="supplierId" class="form-select">
-                            <option value="">-- In-House IT Staff --</option>
-                            @foreach (var sup in Model.Suppliers)
-                            {
-                                <option value="@sup.Id">@sup.Name</option>
-                            }
-                        </select>
-                    </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Contractor / Supplier (Optional)</label>
+                            <select name="supplierId" class="form-select">
+                                <option value="">-- In-House IT Staff --</option>
+                                @foreach (var sup in Model.Suppliers)
+                                {
+                                    <option value="@sup.Id">@sup.Name</option>
+                                }
+                            </select>
+                        </div>
 
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold">Work Performed & Diagnostic Description</label>
-                        <textarea name="description" class="form-control" rows="3" placeholder="Describe diagnosis, repairs, calibration, or actions taken..." required></textarea>
-                    </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Work Performed & Diagnostic Description</label>
+                            <textarea name="description" class="form-control" rows="3" placeholder="Describe diagnosis, repairs, calibration, or actions taken..." required></textarea>
+                        </div>
 
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold">Parts Replaced / Materials (JSON or text)</label>
-                        <input type="text" name="partsReplaced" class="form-control font-monospace" placeholder='e.g. {"Part": "1TB SSD", "Cost": 75}' />
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Parts Replaced / Materials (JSON or text)</label>
+                            <input type="text" name="partsReplaced" class="form-control font-monospace" placeholder='e.g. {"Part": "1TB SSD", "Cost": 75}' />
+                        </div>
                     </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-warning text-dark fw-semibold">Save Maintenance Record</button>
-                </div>
-            </form>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-warning text-dark fw-semibold">Save Maintenance Record</button>
+                    </div>
+                </form>
+            </div>
         </div>
     </div>
-</div>
 
-<!-- Modal: Resolve & Close Ticket -->
-<div class="modal fade" id="closeTicketModal" tabindex="-1" aria-labelledby="closeTicketModalLabel" aria-hidden="true">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <form asp-action="CloseTicket" method="post">
-                @Html.AntiForgeryToken()
-                <input type="hidden" name="ticketId" value="@ticket.Id" />
+    <!-- Modal: Resolve & Close Ticket -->
+    <div class="modal fade" id="closeTicketModal" tabindex="-1" aria-labelledby="closeTicketModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <form asp-action="CloseTicket" method="post">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="ticketId" value="@ticket.Id" />
 
-                <div class="modal-header">
-                    <h5 class="modal-title fw-bold" id="closeTicketModalLabel"><i class="fa-solid fa-check-circle text-success me-2"></i> Resolve & Close Ticket #@ticket.Id</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-                    <p class="text-muted small">
-                        Closing this ticket marks the issue as resolved, sets the closed timestamp, and notifies the requester.
-                    </p>
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold">Resolution Summary & Solution</label>
-                        <textarea name="resolutionNotes" class="form-control" rows="3" placeholder="Explain what resolved the problem or what steps were completed..." required></textarea>
+                    <div class="modal-header">
+                        <h5 class="modal-title fw-bold" id="closeTicketModalLabel"><i class="fa-solid fa-check-circle text-success me-2"></i> Resolve & Close Ticket #@ticket.Id</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                     </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-success fw-semibold"><i class="fa-solid fa-check me-1"></i> Confirm & Close Ticket</button>
-                </div>
-            </form>
+                    <div class="modal-body">
+                        <p class="text-muted small">
+                            Closing this ticket marks the issue as resolved, sets the closed timestamp, and notifies the requester.
+                        </p>
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Resolution Summary & Solution</label>
+                            <textarea name="resolutionNotes" class="form-control" rows="3" placeholder="Explain what resolved the problem or what steps were completed..." required></textarea>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-success fw-semibold"><i class="fa-solid fa-check me-1"></i> Confirm & Close Ticket</button>
+                    </div>
+                </form>
+            </div>
         </div>
     </div>
-</div>
+}

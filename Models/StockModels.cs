@@ -5,6 +5,24 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace StockPortal.Models
 {
+    public static class SystemRoles
+    {
+        public const string Admin = "ADMIN";
+        public const string Maintenance = "MAINTENANCE";
+        public const string EndUser = "END_USER";
+
+        public static readonly string[] All = { Admin, Maintenance, EndUser };
+    }
+
+    public static class MaintenanceTeams
+    {
+        public const string IT = "IT";
+        public const string Biomedical = "BIOMEDICAL";
+        public const string General = "GENERAL";
+
+        public static readonly string[] All = { IT, Biomedical, General };
+    }
+
     [Table("custody_type")]
     public class CustodyType
     {
@@ -132,7 +150,12 @@ namespace StockPortal.Models
         [Column("role")]
         [StringLength(255)]
         [Display(Name = "Role / Title")]
-        public string? Role { get; set; }
+        public string? Role { get; set; } = SystemRoles.EndUser;
+
+        [Column("maintenance_team")]
+        [StringLength(50)]
+        [Display(Name = "Maintenance Team")]
+        public string? MaintenanceTeam { get; set; }
 
         [Column("isActive")]
         public bool? IsActive { get; set; } = true;
@@ -163,7 +186,7 @@ namespace StockPortal.Models
         [Display(Name = "Serial Number")]
         public string? SerialNo { get; set; }
 
-        [Column("bran")]
+        [Column("brand")]
         [StringLength(255)]
         [Display(Name = "Brand / Manufacturer")]
         public string? Brand { get; set; }
@@ -186,9 +209,28 @@ namespace StockPortal.Models
         [Column("userID")]
         public int? UserId { get; set; }
 
+        [NotMapped]
+        public int? CustodianId
+        {
+            get => UserId;
+            set => UserId = value;
+        }
+
         [ForeignKey("UserId")]
         [Display(Name = "Assigned Custodian")]
         public virtual User? User { get; set; }
+
+        [NotMapped]
+        public virtual User? Custodian
+        {
+            get => User;
+            set => User = value;
+        }
+
+        [Column("maintenance_team")]
+        [StringLength(50)]
+        [Display(Name = "Maintenance Team")]
+        public string MaintenanceTeam { get; set; } = MaintenanceTeams.IT;
 
         [Column("roomID")]
         public int? RoomId { get; set; }
@@ -337,6 +379,19 @@ namespace StockPortal.Models
         [Column("closedDT")]
         [Display(Name = "Date Closed")]
         public DateTime? ClosedDT { get; set; }
+
+        [Column("target_team")]
+        [StringLength(50)]
+        [Display(Name = "Target Maintenance Team")]
+        public string TargetTeam { get; set; } = MaintenanceTeams.IT;
+
+        [Column("resolution_details")]
+        [StringLength(1024)]
+        [Display(Name = "Resolution Details")]
+        public string? ResolutionDetails { get; set; }
+
+        [NotMapped]
+        public int? CreatedBy => OpenedBy;
 
         public virtual TicketHandler? Handler { get; set; }
         public virtual ICollection<TicketMsg> Messages { get; set; } = new List<TicketMsg>();

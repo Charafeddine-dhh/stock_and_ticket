@@ -1,6 +1,7 @@
 @model IEnumerable<StockPortal.Models.Ticket>
+@inject StockPortal.Services.ICurrentUserService CurrentUser
 @{
-    ViewData["Title"] = "Service & Support Tickets";
+    ViewData["Title"] = CurrentUser.IsEndUser() ? "My Service Tickets" : "Service & Support Tickets";
     var statuses = ViewBag.Statuses as List<StockPortal.Models.TicketStatus> ?? new();
     var currentFilter = ViewBag.SelectedFilter as string;
 }
@@ -8,8 +9,10 @@
 <!-- Header & Quick Stats Navigation -->
 <div class="d-flex justify-content-between align-items-center mb-4">
     <div>
-        <h4 class="fw-bold mb-0">Helpdesk & Support Tickets</h4>
-        <small class="text-muted">Manage service tickets, technician dispatches, and issue resolutions</small>
+        <h4 class="fw-bold mb-0">@(CurrentUser.IsEndUser() ? "My Service Tickets" : "Helpdesk & Support Tickets")</h4>
+        <small class="text-muted">
+            @(CurrentUser.IsEndUser() ? "View and track tickets opened by you for your hospital equipment" : "Manage service tickets, technician dispatches, and issue resolutions across teams")
+        </small>
     </div>
     <div class="d-flex gap-2">
         <a href="@Url.Action("ExportCsv", new { statusId = ViewBag.SelectedStatusId, priority = ViewBag.SelectedPriority, type = ViewBag.SelectedType, search = ViewBag.Search, filter = currentFilter })" class="btn btn-outline-success">
@@ -20,6 +23,16 @@
         </a>
     </div>
 </div>
+
+@if (CurrentUser.IsMaintenance())
+{
+    <div class="alert alert-primary d-flex align-items-center gap-2 mb-4 shadow-sm border-0">
+        <i class="fa-solid fa-users-gear fs-4"></i>
+        <div>
+            <strong>@CurrentUser.GetMaintenanceTeam() Maintenance Queue:</strong> You are viewing tickets routed directly to your engineering team.
+        </div>
+    </div>
+}
 
 <!-- Quick Assignment Pills & Filter Toolbar -->
 <div class="card shadow-sm border-0 mb-4">
@@ -93,6 +106,7 @@
                 <thead class="table-light">
                     <tr>
                         <th style="width: 80px;">Ticket #</th>
+                        <th>Target Team</th>
                         <th>Category & Asset</th>
                         <th>Priority</th>
                         <th>Status</th>
@@ -107,7 +121,7 @@
                     @if (!Model.Any())
                     {
                         <tr>
-                            <td colspan="9" class="text-center text-muted py-5">
+                            <td colspan="10" class="text-center text-muted py-5">
                                 <i class="fa-solid fa-ticket fa-2x mb-2 text-secondary"></i>
                                 <div>No tickets found matching this filter view.</div>
                             </td>
@@ -120,6 +134,11 @@
                                 <a href="@Url.Action("Details", new { id = ticket.Id })" class="text-decoration-none">
                                     #@ticket.Id
                                 </a>
+                            </td>
+                            <td>
+                                <span class="badge @(ticket.TargetTeam == "BIOMEDICAL" ? "bg-info text-dark" : ticket.TargetTeam == "GENERAL" ? "bg-warning text-dark" : "bg-primary")">
+                                    @ticket.TargetTeam
+                                </span>
                             </td>
                             <td>
                                 <div class="fw-semibold">

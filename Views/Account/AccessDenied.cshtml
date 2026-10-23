@@ -2,6 +2,13 @@
     Layout = null;
     string reason = (ViewBag.Reason as string) ?? "NotFound";
     string username = (ViewBag.Username as string) ?? Environment.UserName;
+    string pcName = (ViewBag.PcName as string) ?? Environment.MachineName;
+    string clientIp = (ViewBag.ClientIp as string) ?? "127.0.0.1";
+    var asset = ViewBag.MatchedAsset as StockPortal.Models.Asset;
+    var rooms = ViewBag.Rooms as List<StockPortal.Models.Room> ?? new();
+    int? submittedTicketId = TempData["SubmittedTicketId"] as int?;
+
+    bool isTicketSubmitted = reason.Equals("TicketSubmitted", StringComparison.OrdinalIgnoreCase) || submittedTicketId.HasValue;
     bool isInactive = reason.Equals("Inactive", StringComparison.OrdinalIgnoreCase);
 }
 <!DOCTYPE html>
@@ -28,7 +35,7 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            padding: 1.5rem;
+            padding: 2rem 1rem;
             color: #1e293b;
         }
 
@@ -36,26 +43,26 @@
             background: #ffffff;
             border-radius: 1.25rem;
             box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.45);
-            max-width: 520px;
+            max-width: 680px;
             width: 100%;
             overflow: hidden;
             border: 1px solid rgba(255, 255, 255, 0.1);
         }
 
         .auth-header {
-            padding: 2.5rem 2rem 1.5rem 2rem;
+            padding: 2.25rem 2rem 1.25rem 2rem;
             text-align: center;
         }
 
         .icon-circle {
-            width: 84px;
-            height: 84px;
+            width: 76px;
+            height: 76px;
             border-radius: 50%;
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            font-size: 2.3rem;
-            margin-bottom: 1.25rem;
+            font-size: 2rem;
+            margin-bottom: 1rem;
         }
 
         .icon-inactive {
@@ -70,93 +77,203 @@
             border: 3px solid #fde68a;
         }
 
+        .icon-submitted {
+            background-color: #f0fdf4;
+            color: #16a34a;
+            border: 3px solid #bbf7d0;
+        }
+
         .diagnostic-box {
             background: #f8fafc;
             border: 1px solid #e2e8f0;
             border-radius: 0.75rem;
-            padding: 1rem 1.25rem;
+            padding: 0.85rem 1.15rem;
             font-size: 0.85rem;
         }
 
-        .btn-retry {
-            padding: 0.75rem 1.5rem;
-            font-weight: 600;
-            border-radius: 0.5rem;
+        .auto-ticket-panel {
+            background: #f8fafc;
+            border: 1px solid #cbd5e1;
+            border-radius: 0.85rem;
+            padding: 1.35rem;
         }
     </style>
 </head>
 <body>
     <div class="auth-card">
-        <div class="auth-header">
-            @if (isInactive)
-            {
-                <div class="icon-circle icon-inactive">
-                    <i class="fa-solid fa-user-lock"></i>
+        @if (isTicketSubmitted)
+        {
+            <div class="auth-header">
+                <div class="icon-circle icon-submitted">
+                    <i class="fa-solid fa-circle-check"></i>
                 </div>
-                <h3 class="fw-bold text-danger mb-2">Account Deactivated</h3>
+                <h3 class="fw-bold text-success mb-2">Automated Support Ticket Dispatched!</h3>
                 <p class="text-muted mb-0">
-                    Your PC account <code class="fw-bold text-dark bg-light px-2 py-1 rounded">@username</code> is registered but currently marked as <strong>Inactive</strong>.
+                    A technical support ticket has been created directly in the IT queue for your workstation.
                 </p>
-            }
-            else
-            {
-                <div class="icon-circle icon-notfound">
-                    <i class="fa-solid fa-user-xmark"></i>
+            </div>
+            <div class="px-4 pb-4">
+                <div class="alert alert-success border-0 shadow-xs mb-4">
+                    <div class="d-flex align-items-center gap-2 fw-bold fs-5 mb-1">
+                        <i class="fa-solid fa-ticket"></i>
+                        <span>Ticket Reference: #@(submittedTicketId ?? 0)</span>
+                    </div>
+                    <div class="small">
+                        Your workstation telemetry (PC: <code>@pcName</code>, IP: <code>@clientIp</code>) and issue notes were forwarded to IT Helpdesk.
+                    </div>
                 </div>
-                <h3 class="fw-bold text-warning-emphasis mb-2">Access Denied</h3>
-                <p class="text-muted mb-0">
-                    No matching authorized account was found for PC username <code class="fw-bold text-dark bg-light px-2 py-1 rounded">@username</code>.
-                </p>
-            }
-        </div>
-
-        <div class="px-4 pb-4">
-            <div class="diagnostic-box mb-4">
-                <div class="d-flex justify-content-between mb-2">
-                    <span class="text-muted">Detected PC Username:</span>
-                    <strong class="font-monospace text-dark">@username</strong>
-                </div>
-                <div class="d-flex justify-content-between mb-2">
-                    <span class="text-muted">Domain / Workstation:</span>
-                    <span class="text-secondary font-monospace">@Environment.UserDomainName</span>
-                </div>
-                <div class="d-flex justify-content-between mb-2">
-                    <span class="text-muted">Access Policy:</span>
-                    <span class="badge @(isInactive ? "bg-danger" : "bg-warning text-dark")">Auto-Login Rejected</span>
-                </div>
-                <div class="d-flex justify-content-between">
-                    <span class="text-muted">HTTP Status:</span>
-                    <span class="text-danger fw-semibold">403 Forbidden</span>
+                <div class="d-grid gap-2 mb-3">
+                    <a href="@Url.Action("Index", "Home")" class="btn btn-outline-secondary">
+                        <i class="fa-solid fa-arrow-rotate-right me-1"></i> Try Access Again
+                    </a>
                 </div>
             </div>
+        }
+        else
+        {
+            <div class="auth-header">
+                @if (isInactive)
+                {
+                    <div class="icon-circle icon-inactive">
+                        <i class="fa-solid fa-user-lock"></i>
+                    </div>
+                    <h3 class="fw-bold text-danger mb-1">Account Deactivated</h3>
+                    <p class="text-muted mb-0 small">
+                        Your PC username <code class="fw-bold text-dark bg-light px-2 py-0.5 rounded">@username</code> is registered but marked <strong>Inactive</strong>.
+                    </p>
+                }
+                else
+                {
+                    <div class="icon-circle icon-notfound">
+                        <i class="fa-solid fa-user-xmark"></i>
+                    </div>
+                    <h3 class="fw-bold text-warning-emphasis mb-1">Access Restricted</h3>
+                    <p class="text-muted mb-0 small">
+                        Workstation user <code class="fw-bold text-dark bg-light px-2 py-0.5 rounded">@username</code> is not recognized in the authorized user directory.
+                    </p>
+                }
+            </div>
 
-            <div class="alert @(isInactive ? "alert-danger" : "alert-warning") border-0 d-flex gap-3 align-items-start small mb-4">
-                <i class="fa-solid fa-circle-exclamation mt-1 fs-5"></i>
-                <div>
-                    @if (isInactive)
-                    {
-                        <span>Your login privileges have been deactivated by an IT administrator. Please contact your system administrator or department manager to reactivate your account.</span>
-                    }
-                    else
-                    {
-                        <span>Only authorized personnel registered in the IT Master Directory can access the stock and ticketing system. Please request your IT administrator to register your PC username <code>@username</code>.</span>
-                    }
+            <div class="px-4 pb-4">
+                <!-- Status Diagnostic Strip -->
+                <div class="diagnostic-box mb-3">
+                    <div class="row g-2">
+                        <div class="col-6">
+                            <span class="text-muted small">PC Account:</span>
+                            <span class="font-monospace fw-bold text-dark d-block">@username</span>
+                        </div>
+                        <div class="col-6">
+                            <span class="text-muted small">Workstation Host:</span>
+                            <span class="font-monospace text-primary fw-semibold d-block">@pcName</span>
+                        </div>
+                        <div class="col-6">
+                            <span class="text-muted small">Access Status:</span>
+                            <span class="badge @(isInactive ? "bg-danger" : "bg-warning text-dark")">Rejected (403 Forbidden)</span>
+                        </div>
+                        <div class="col-6">
+                            <span class="text-muted small">Hardware Tag:</span>
+                            <span class="text-dark fw-semibold">@(asset?.HospitalNo ?? "Unregistered")</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Automated PC Ticket Section (Appears ONLY when user cannot login) -->
+                <div class="auto-ticket-panel mb-3">
+                    <div class="d-flex align-items-center gap-2 mb-2 pb-2 border-bottom">
+                        <div class="stat-icon bg-warning bg-opacity-25 text-warning-emphasis p-2 rounded" style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;">
+                            <i class="fa-solid fa-bolt"></i>
+                        </div>
+                        <div>
+                            <h6 class="fw-bold mb-0 text-dark">Need Access? Generate Automated Support Ticket</h6>
+                            <span class="text-muted" style="font-size: 0.75rem;">Opens an automated technical ticket for IT support with your PC telemetry.</span>
+                        </div>
+                    </div>
+
+                    <form asp-action="SubmitAccessTicket" method="post" id="accessTicketForm">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="pcName" value="@pcName" />
+                        <input type="hidden" name="assetId" value="@(asset?.Id)" />
+
+                        <!-- Workstation Specs Readout -->
+                        <div class="row g-2 mb-3 small">
+                            <div class="col-md-6">
+                                <span class="text-muted d-block" style="font-size: 0.72rem;">Hardware Asset:</span>
+                                <strong class="text-dark">@(asset != null ? $"{asset.Brand} {asset.ModelNo} (S/N: {asset.SerialNo})" : "Workstation (Not Tagged)")</strong>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="text-muted d-block" style="font-size: 0.72rem;">Confirm Room / Location:</label>
+                                <select name="roomId" class="form-select form-select-sm">
+                                    <option value="">-- Select Your Room / Office --</option>
+                                    @foreach (var r in rooms)
+                                    {
+                                        <option value="@r.Id" selected="@(asset?.RoomId == r.Id)">Room @(r.RoomNo) (Floor @r.Floor)</option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Quick Request Templates -->
+                        <div class="mb-2">
+                            <div class="d-flex flex-wrap gap-1">
+                                <button type="button" class="btn btn-xs btn-outline-secondary py-0 px-2 quick-chip" style="font-size: 0.72rem;"
+                                        data-msg="Please activate my account for workstation @pcName. I require access for daily operations.">
+                                    🔑 Request Activation
+                                </button>
+                                <button type="button" class="btn btn-xs btn-outline-secondary py-0 px-2 quick-chip" style="font-size: 0.72rem;"
+                                        data-msg="Workstation @pcName recently reassigned. Please register PC username '@username' in the directory.">
+                                    🖥️ New Workstation
+                                </button>
+                                <button type="button" class="btn btn-xs btn-outline-secondary py-0 px-2 quick-chip" style="font-size: 0.72rem;"
+                                        data-msg="Urgent: Clinical/department staff member locked out. Immediate IT assistance required.">
+                                    🚨 Urgent Assistance
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Manual Notes Box (Editable by User) -->
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold text-dark mb-1">
+                                <i class="fa-solid fa-pen me-1 text-primary"></i> Notes / Issue Description (Editable):
+                            </label>
+                            <textarea name="notes" id="ticketNotes" class="form-control form-control-sm" rows="3"
+                                      placeholder="Explain your access request or describe the issue preventing you from logging in..." required>Please review access for PC username '@username' on workstation '@pcName'. Account is currently rejected.</textarea>
+                            <div class="form-text small" style="font-size: 0.7rem;">
+                                These notes will be sent directly to the IT helpdesk queue.
+                            </div>
+                        </div>
+
+                        <!-- Submit Button -->
+                        <div class="d-grid gap-2">
+                            <button type="submit" class="btn btn-warning btn-sm text-dark fw-bold py-2 shadow-xs d-flex align-items-center justify-content-center gap-2">
+                                <i class="fa-solid fa-paper-plane"></i>
+                                <span>Submit Support Ticket to IT</span>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+
+                <div class="d-flex justify-content-between align-items-center pt-2 text-muted small" style="font-size: 0.75rem;">
+                    <span>Hospital Helpdesk &bull; Internal Ext: <strong>4444</strong></span>
+                    <a href="@Url.Action("Index", "Home")" class="text-decoration-none">
+                        <i class="fa-solid fa-rotate-right me-1"></i> Retry Login
+                    </a>
                 </div>
             </div>
-
-            <div class="d-grid gap-2 mb-3">
-                <a href="@Url.Action("Index", "Home")" class="btn btn-primary btn-retry">
-                    <i class="fa-solid fa-arrow-rotate-right me-2"></i> Retry Auto-Login
-                </a>
-            </div>
-
-            <div class="text-center text-muted small">
-                IT Support Desk &bull; Host: <code>@Environment.MachineName</code>
-            </div>
-        </div>
+        }
     </div>
 
-    <!-- Bootstrap Bundle JS -->
+    <!-- Scripts -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        document.querySelectorAll('.quick-chip').forEach(btn => {
+            btn.addEventListener('click', function () {
+                const box = document.getElementById('ticketNotes');
+                if (box) {
+                    box.value = this.getAttribute('data-msg');
+                    box.focus();
+                }
+            });
+        });
+    </script>
 </body>
 </html>

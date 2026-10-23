@@ -105,37 +105,6 @@ namespace StockPortal.Data
                     context.SaveChanges();
                 }
             }
-            else
-            {
-                // Ensure existing database has the current workstation user mapped to active administrator
-                var adminUser = context.Users.FirstOrDefault(u => 
-                    u.FullName == "Abbas Al-Amiri" || 
-                    u.DomainUser == "a.amiri" || 
-                    u.DomainUser == "Abbas" ||
-                    u.DomainUser == currentPcUser
-                );
-
-                if (adminUser != null && adminUser.DomainUser != currentPcUser)
-                {
-                    adminUser.DomainUser = currentPcUser;
-                    adminUser.IsActive = true;
-                    context.SaveChanges();
-                }
-
-                // Ensure inactive test account exists
-                if (!context.Users.Any(u => u.DomainUser == "inactive.user"))
-                {
-                    context.Users.Add(new User
-                    {
-                        FullName = "Former Staff",
-                        DomainUser = "inactive.user",
-                        Role = "Inactive Account",
-                        DepartmentId = 1,
-                        IsActive = false
-                    });
-                    context.SaveChanges();
-                }
-            }
 
             // Seed Assets if empty
             if (!context.Assets.Any())
@@ -182,7 +151,8 @@ namespace StockPortal.Data
                         NeedsPeriodic = true,
                         PeriodicInterval = 90,
                         LastPeriodic = DateTime.Now.AddDays(-75),
-                        NextPeriodic = DateTime.Now.AddDays(15)
+                        NextPeriodic = DateTime.Now.AddDays(15),
+                        MaintenanceTeam = MaintenanceTeams.IT
                     },
                     new Asset
                     {
@@ -203,7 +173,8 @@ namespace StockPortal.Data
                         NeedsPeriodic = true,
                         PeriodicInterval = 180,
                         LastPeriodic = DateTime.Now.AddDays(-190), // Overdue!
-                        NextPeriodic = DateTime.Now.AddDays(-10)
+                        NextPeriodic = DateTime.Now.AddDays(-10),
+                        MaintenanceTeam = MaintenanceTeams.Biomedical
                     },
                     new Asset
                     {
@@ -221,7 +192,8 @@ namespace StockPortal.Data
                         Specs = "{\"Model\": \"EliteBook 850 G8\", \"CPU\": \"Intel Core i7-1165G7\", \"RAM\": \"16GB\", \"SSD\": \"512GB NVMe\"}",
                         BuyingDate = DateTime.Now.AddMonths(-8),
                         WarrantyTill = DateTime.Now.AddMonths(28),
-                        NeedsPeriodic = false
+                        NeedsPeriodic = false,
+                        MaintenanceTeam = MaintenanceTeams.IT
                     },
                     new Asset
                     {
@@ -242,7 +214,52 @@ namespace StockPortal.Data
                         NeedsPeriodic = true,
                         PeriodicInterval = 180,
                         LastPeriodic = DateTime.Now.AddDays(-60),
-                        NextPeriodic = DateTime.Now.AddDays(120)
+                        NextPeriodic = DateTime.Now.AddDays(120),
+                        MaintenanceTeam = MaintenanceTeams.IT
+                    },
+                    new Asset
+                    {
+                        HospitalNo = "HOSP-BIO-001",
+                        SerialNo = "SN-GE-CARESCAPE-881",
+                        Brand = "GE Healthcare",
+                        ModelNo = 800,
+                        Price = 12500.00m,
+                        Type = "Patient Monitor",
+                        Status = "In Service",
+                        SupplierId = philips.Id,
+                        RoomId = clinicRoom.Id,
+                        UserId = sarah.Id,
+                        CustodyTypeId = shared,
+                        Specs = "{\"Model\": \"Carescape B850 Monitor\", \"Parameters\": \"ECG, SpO2, NIBP, Temp\"}",
+                        BuyingDate = DateTime.Now.AddMonths(-12),
+                        WarrantyTill = DateTime.Now.AddMonths(12),
+                        NeedsPeriodic = true,
+                        PeriodicInterval = 180,
+                        LastPeriodic = DateTime.Now.AddDays(-60),
+                        NextPeriodic = DateTime.Now.AddDays(120),
+                        MaintenanceTeam = MaintenanceTeams.Biomedical
+                    },
+                    new Asset
+                    {
+                        HospitalNo = "HOSP-GEN-001",
+                        SerialNo = "SN-SCH-GALAXY-300",
+                        Brand = "Schneider Electric",
+                        ModelNo = 300,
+                        Price = 28500.00m,
+                        Type = "Facility UPS",
+                        Status = "In Service",
+                        SupplierId = dell.Id,
+                        RoomId = srvRoom.Id,
+                        UserId = abbas.Id,
+                        CustodyTypeId = shared,
+                        Specs = "{\"Capacity\": \"40kVA / 36kW\", \"Battery Bank\": \"32x 12V 100Ah\"}",
+                        BuyingDate = DateTime.Now.AddMonths(-16),
+                        WarrantyTill = DateTime.Now.AddMonths(20),
+                        NeedsPeriodic = true,
+                        PeriodicInterval = 90,
+                        LastPeriodic = DateTime.Now.AddDays(-30),
+                        NextPeriodic = DateTime.Now.AddDays(60),
+                        MaintenanceTeam = MaintenanceTeams.General
                     }
                 };
 
