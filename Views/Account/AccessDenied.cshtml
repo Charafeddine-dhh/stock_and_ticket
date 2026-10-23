@@ -1,0 +1,184 @@
+@{
+    Layout = null;
+    string reason = (ViewBag.Reason as string) ?? "NotFound";
+    string username = (ViewBag.Username as string) ?? Environment.UserName;
+    var activeUsers = ViewBag.ActiveUsers as List<StockPortal.Models.User> ?? new();
+    bool isInactive = reason.Equals("Inactive", StringComparison.OrdinalIgnoreCase);
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Access Denied - Stock & Ticket Portal</title>
+    
+    <!-- Google Fonts: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Bootstrap 5 & FontAwesome 6 CDN -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+    
+    <style>
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 1.5rem;
+            color: #1e293b;
+        }
+
+        .auth-card {
+            background: #ffffff;
+            border-radius: 1.25rem;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.35);
+            max-width: 540px;
+            width: 100%;
+            overflow: hidden;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .auth-header {
+            padding: 2.5rem 2rem 1.5rem 2rem;
+            text-align: center;
+        }
+
+        .icon-circle {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2.2rem;
+            margin-bottom: 1.25rem;
+        }
+
+        .icon-inactive {
+            background-color: #fef2f2;
+            color: #ef4444;
+            border: 2px solid #fecaca;
+        }
+
+        .icon-notfound {
+            background-color: #fffbeb;
+            color: #f59e0b;
+            border: 2px solid #fde68a;
+        }
+
+        .diagnostic-box {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 0.75rem;
+            padding: 1rem 1.25rem;
+            font-size: 0.85rem;
+        }
+
+        .btn-retry {
+            padding: 0.75rem 1.5rem;
+            font-weight: 600;
+            border-radius: 0.5rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="auth-card">
+        <div class="auth-header">
+            @if (isInactive)
+            {
+                <div class="icon-circle icon-inactive">
+                    <i class="fa-solid fa-user-lock"></i>
+                </div>
+                <h3 class="fw-bold text-danger mb-2">Account Deactivated</h3>
+                <p class="text-muted mb-0">
+                    Your Windows account <code class="fw-bold text-dark bg-light px-2 py-1 rounded">@username</code> is registered but currently marked as <strong>Inactive</strong>.
+                </p>
+            }
+            else
+            {
+                <div class="icon-circle icon-notfound">
+                    <i class="fa-solid fa-user-xmark"></i>
+                </div>
+                <h3 class="fw-bold text-warning-emphasis mb-2">Access Denied</h3>
+                <p class="text-muted mb-0">
+                    No matching active account was found for Windows user <code class="fw-bold text-dark bg-light px-2 py-1 rounded">@username</code>.
+                </p>
+            }
+        </div>
+
+        <div class="px-4 pb-4">
+            <div class="diagnostic-box mb-4">
+                <div class="d-flex justify-content-between mb-2">
+                    <span class="text-muted">Detected PC Username:</span>
+                    <strong class="font-monospace">@username</strong>
+                </div>
+                <div class="d-flex justify-content-between mb-2">
+                    <span class="text-muted">Domain / Workstation:</span>
+                    <span class="text-secondary font-monospace">@Environment.UserDomainName</span>
+                </div>
+                <div class="d-flex justify-content-between mb-2">
+                    <span class="text-muted">Access Policy:</span>
+                    <span class="badge bg-danger">Auto-Login Rejected</span>
+                </div>
+                <div class="d-flex justify-content-between">
+                    <span class="text-muted">Status:</span>
+                    <span class="text-danger fw-semibold">HTTP 403 Forbidden</span>
+                </div>
+            </div>
+
+            <div class="alert @(isInactive ? "alert-danger" : "alert-warning") border-0 d-flex gap-3 align-items-start small mb-4">
+                <i class="fa-solid fa-circle-exclamation mt-1"></i>
+                <div>
+                    @if (isInactive)
+                    {
+                        <span>Your account clearance has been suspended. Please contact your department manager or IT support to reactivate your portal privileges.</span>
+                    }
+                    else
+                    {
+                        <span>Only authorized personnel registered in the IT Master Directory can access the stock and ticketing systems. Please request an account from the IT department.</span>
+                    }
+                </div>
+            </div>
+
+            <div class="d-grid gap-2">
+                <a href="@Url.Action("Index", "Home")" class="btn btn-primary btn-retry">
+                    <i class="fa-solid fa-arrow-rotate-right me-2"></i> Retry Auto-Login
+                </a>
+            </div>
+
+            @if (activeUsers.Any())
+            {
+                <div class="mt-4 pt-3 border-top text-center">
+                    <small class="text-muted d-block mb-2"><i class="fa-solid fa-flask me-1"></i> Developer & Admin Testing Switcher:</small>
+                    <div class="dropdown">
+                        <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                            Select Active User to Test
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end shadow border-0" style="max-height: 250px; overflow-y: auto;">
+                            <li><h6 class="dropdown-header">Active Directory Users</h6></li>
+                            @foreach (var user in activeUsers)
+                            {
+                                <li>
+                                    <a class="dropdown-item d-flex justify-content-between align-items-center" 
+                                       href="@Url.Action("SwitchUser", "Account", new { id = user.Id, returnUrl = "/" })">
+                                        <span>@user.FullName</span>
+                                        <small class="text-muted ms-2">(@user.Role)</small>
+                                    </a>
+                                </li>
+                            }
+                        </ul>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+
+    <!-- Bootstrap Bundle JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

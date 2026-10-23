@@ -23,7 +23,22 @@ namespace StockPortal.Middleware
 
         public async Task InvokeAsync(HttpContext context, StockDbContext dbContext)
         {
-            // 1. Check if user has an explicit active session switch (e.g. testing different roles)
+            var path = context.Request.Path.Value?.ToLower() ?? "";
+
+            // 1. Bypass authentication check for static assets and public/error endpoints
+            if (path.StartsWith("/css") ||
+                path.StartsWith("/js") ||
+                path.StartsWith("/lib") ||
+                path.StartsWith("/images") ||
+                path.StartsWith("/favicon.ico") ||
+                path.StartsWith("/account/accessdenied") ||
+                path.StartsWith("/account/switchuser"))
+            {
+                await _next(context);
+                return;
+            }
+
+            // 2. Check if user has an explicit active session switch (for testing identities)
             var sessionUserId = context.Session.GetInt32("ActiveUserId");
             User? matchedUser = null;
 
@@ -32,12 +47,19 @@ namespace StockPortal.Middleware
                 matchedUser = await dbContext.Users
                     .Include(u => u.Department)
                     .FirstOrDefaultAsync(u => u.Id == sessionUserId.Value);
+
+                // If switched user was deactivated or deleted, clear the session
+                if (matchedUser != null && matchedUser.IsActive != true)
+                {
+                    context.Session.Remove("ActiveUserId");
+                    matchedUser = null;
+                }
             }
 
-            // 2. If no manual session override, detect domain user automatically
+            // 3. Auto-detect domain/PC user if no manual session override
+            string cleanUsername = "";
             if (matchedUser == null)
             {
-                // Try getting domain username from Windows Identity, headers, or Environment
                 string? rawDomainUser = context.User.Identity?.Name;
 
                 if (string.IsNullOrWhiteSpace(rawDomainUser))
@@ -48,59 +70,59 @@ namespace StockPortal.Middleware
 
                 if (string.IsNullOrWhiteSpace(rawDomainUser))
                 {
-                    // Local / Intranet Windows fallback (e.g. "Abbas")
+                    // Intranet Windows fallback (e.g. PC username "Abbas")
                     rawDomainUser = Environment.UserName;
                 }
 
-                string cleanUsername = rawDomainUser ?? "Guest";
+                cleanUsername = rawDomainUser ?? "Guest";
                 if (cleanUsername.Contains('\\'))
                 {
                     cleanUsername = cleanUsername.Split('\\').Last();
                 }
 
-                // Match against users table in database by domainUser or fullName
+                // Match against users table in database by DomainUser or FullName
                 matchedUser = await dbContext.Users
                     .Include(u => u.Department)
                     .FirstOrDefaultAsync(u =>
                         (u.DomainUser != null && u.DomainUser.ToLower() == cleanUsername.ToLower()) ||
                         (u.DomainUser != null && rawDomainUser != null && u.DomainUser.ToLower() == rawDomainUser.ToLower()) ||
-                        (u.FullName != null && u.FullName.ToLower() == cleanUsername.ToLower())
+                        (u.FullName != null && u.FullName.ToLower() == cleanUsername.ToLower()) ||
+                        (u.FullName != null && u.FullName.ToLower().StartsWith(cleanUsername.ToLower()))
                     );
-
-                // Auto-provision if user does not exist yet in database
-                if (matchedUser == null && !string.IsNullOrWhiteSpace(cleanUsername))
-                {
-                    var defaultDept = await dbContext.Departments.FirstOrDefaultAsync();
-                    matchedUser = new User
-                    {
-                        FullName = cleanUsername,
-                        DomainUser = cleanUsername,
-                        Role = "Staff",
-                        DepartmentId = defaultDept?.Id,
-                        IsActive = true
-                    };
-                    dbContext.Users.Add(matchedUser);
-                    await dbContext.SaveChangesAsync();
-                }
             }
-
-            // 3. Set Claims and store user in Context
-            if (matchedUser != null)
+            else
             {
-                context.Items["CurrentUser"] = matchedUser;
-
-                var claims = new List<Claim>
-                {
-                    new Claim(ClaimTypes.NameIdentifier, matchedUser.Id.ToString()),
-                    new Claim(ClaimTypes.Name, matchedUser.FullName ?? matchedUser.DomainUser ?? "User"),
-                    new Claim(ClaimTypes.Role, matchedUser.Role ?? "Staff"),
-                    new Claim("DomainUser", matchedUser.DomainUser ?? Environment.UserName),
-                    new Claim("Department", matchedUser.Department?.Name ?? "General")
-                };
-
-                var identity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
-                context.User = new ClaimsPrincipal(identity);
+                cleanUsername = matchedUser.DomainUser ?? matchedUser.FullName ?? "User";
             }
+
+            // 4. REJECTION CHECK: User not found in database
+            if (matchedUser == null)
+            {
+                context.Response.Redirect($"/Account/AccessDenied?reason=NotFound&username={Uri.EscapeDataString(cleanUsername)}");
+                return;
+            }
+
+            // 5. REJECTION CHECK: User found but inactive
+            if (matchedUser.IsActive != true)
+            {
+                context.Response.Redirect($"/Account/AccessDenied?reason=Inactive&username={Uri.EscapeDataString(cleanUsername)}");
+                return;
+            }
+
+            // 6. AUTO LOGIN: User is active and authorized
+            context.Items["CurrentUser"] = matchedUser;
+
+            var claims = new List<Claim>
+            {
+                new Claim(ClaimTypes.NameIdentifier, matchedUser.Id.ToString()),
+                new Claim(ClaimTypes.Name, matchedUser.FullName ?? matchedUser.DomainUser ?? "User"),
+                new Claim(ClaimTypes.Role, matchedUser.Role ?? "Staff"),
+                new Claim("DomainUser", matchedUser.DomainUser ?? cleanUsername),
+                new Claim("Department", matchedUser.Department?.Name ?? "General")
+            };
+
+            var identity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
+            context.User = new ClaimsPrincipal(identity);
 
             await _next(context);
         }

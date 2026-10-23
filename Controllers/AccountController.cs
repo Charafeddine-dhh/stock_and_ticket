@@ -75,5 +75,20 @@ namespace StockPortal.Controllers
 
             return View(user);
         }
+
+        // GET: Account/AccessDenied
+        [HttpGet]
+        public async Task<IActionResult> AccessDenied(string? reason, string? username)
+        {
+            ViewBag.Reason = reason ?? "NotFound";
+            ViewBag.Username = username ?? Environment.UserName;
+            ViewBag.ActiveUsers = await _context.Users
+                .Include(u => u.Department)
+                .Where(u => u.IsActive == true)
+                .OrderBy(u => u.FullName)
+                .ToListAsync();
+
+            return View();
+        }
     }
 }
