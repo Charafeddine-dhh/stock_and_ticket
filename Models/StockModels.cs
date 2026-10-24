@@ -517,8 +517,93 @@ namespace StockPortal.Models
         [Column("timStamp")]
         public DateTime? TimStamp { get; set; } = DateTime.Now;
 
+        [Column("workOrderStatus")]
+        [StringLength(50)]
+        [Display(Name = "Work Order Status")]
+        public string? WorkOrderStatus { get; set; } = "Completed"; // "Under Maintenance" or "Completed"
+
+        [Column("sentDate")]
+        [Display(Name = "Sent to Maintenance")]
+        public DateTime? SentDate { get; set; }
+
+        [Column("returnDate")]
+        [Display(Name = "Returned from Maintenance")]
+        public DateTime? ReturnDate { get; set; }
+
+        [Column("actionTaken")]
+        [StringLength(1024)]
+        [Display(Name = "Work Summary / Actions Taken")]
+        public string? ActionTaken { get; set; }
+
+        [Column("cost")]
+        [DataType(DataType.Currency)]
+        [Display(Name = "Cost ($)")]
+        public decimal? Cost { get; set; }
+
+        [Column("previousUserId")]
+        public int? PreviousUserId { get; set; }
+
+        [ForeignKey("PreviousUserId")]
+        public virtual User? PreviousUser { get; set; }
+
+        [Column("previousRoomId")]
+        public int? PreviousRoomId { get; set; }
+
+        [ForeignKey("PreviousRoomId")]
+        public virtual Room? PreviousRoom { get; set; }
+
         [NotMapped]
-        public string TypeName => MaintenanceType == 2 ? "Preventive / Periodic" : "Breakdown / Repair";
+        public string TypeName => MaintenanceType switch
+        {
+            2 => "Preventive / Periodic",
+            3 => "Supplier Warranty Repair",
+            4 => "External Overhaul / Calibration",
+            _ => "Breakdown / Repair"
+        };
+
+        [NotMapped]
+        public bool IsUnderMaintenance => string.Equals(WorkOrderStatus, "Under Maintenance", StringComparison.OrdinalIgnoreCase);
+
+        [NotMapped]
+        public int DaysInMaintenance => SentDate.HasValue ? Math.Max(0, (int)(DateTime.Now.Date - SentDate.Value.Date).TotalDays) : 0;
+
+        [NotMapped]
+        public List<ReplacedPartItem> ParsedParts
+        {
+            get
+            {
+                if (string.IsNullOrWhiteSpace(PartsReplaced)) return new List<ReplacedPartItem>();
+                try
+                {
+                    return JsonSerializer.Deserialize<List<ReplacedPartItem>>(PartsReplaced, new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new List<ReplacedPartItem>();
+                }
+                catch
+                {
+                    return new List<ReplacedPartItem> { new ReplacedPartItem { PartName = PartsReplaced } };
+                }
+            }
+        }
+    }
+
+    public class ReplacedPartItem
+    {
+        public string? PartName { get; set; }
+        public string? PartNumber { get; set; }
+        public int Quantity { get; set; } = 1;
+        public decimal? Cost { get; set; }
+        public bool UnderWarranty { get; set; }
+        public string? SerialNo { get; set; }
+        public string? Notes { get; set; }
+    }
+
+    public static class TicketStatusConstants
+    {
+        public const int Opened = 1;
+        public const int Pending = 2;
+        public const int Delayed = 3;
+        public const int Canceled = 4;
+        public const int Closed = 5;
+        public const int Maintenance = 6;
     }
 
     [Table("device_forms")]

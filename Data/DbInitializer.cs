@@ -57,8 +57,14 @@ namespace StockPortal.Data
                     new TicketStatus { Id = 2, Status = "pending" },
                     new TicketStatus { Id = 3, Status = "delayed" },
                     new TicketStatus { Id = 4, Status = "canceled" },
-                    new TicketStatus { Id = 5, Status = "closed" }
+                    new TicketStatus { Id = 5, Status = "closed" },
+                    new TicketStatus { Id = 6, Status = "maintenance" }
                 );
+                context.SaveChanges();
+            }
+            else if (!context.TicketStatuses.Any(s => s.Status != null && s.Status.ToLower() == "maintenance"))
+            {
+                context.TicketStatuses.Add(new TicketStatus { Id = 6, Status = "maintenance" });
                 context.SaveChanges();
             }
 
@@ -67,9 +73,24 @@ namespace StockPortal.Data
             {
                 context.CustodyTypes.AddRange(
                     new CustodyType { Id = 1, Type = "Personal" },
-                    new CustodyType { Id = 2, Type = "Shared" }
+                    new CustodyType { Id = 2, Type = "Shared" },
+                    new CustodyType { Id = 3, Type = "Supplier / External Maintenance" }
                 );
                 context.SaveChanges();
+            }
+            else if (!context.CustodyTypes.Any(c => c.Id == 3))
+            {
+                context.CustodyTypes.Add(new CustodyType { Id = 3, Type = "Supplier / External Maintenance" });
+                context.SaveChanges();
+            }
+            else
+            {
+                var cust3 = context.CustodyTypes.Find(3);
+                if (cust3 != null && string.IsNullOrEmpty(cust3.Type))
+                {
+                    cust3.Type = "Supplier / External Maintenance";
+                    context.SaveChanges();
+                }
             }
 
             // Seed Departments if empty

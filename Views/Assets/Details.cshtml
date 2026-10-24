@@ -30,6 +30,22 @@
         </a>
         @if (canManage)
         {
+            @if (string.Equals(asset.Status, "Under Maintenance", StringComparison.OrdinalIgnoreCase))
+            {
+                var activeWo = asset.MaintenanceRecords.FirstOrDefault(m => m.WorkOrderStatus == "Under Maintenance");
+                if (activeWo != null)
+                {
+                    <a href="@Url.Action("ReturnFromSupplier", "Maintenance", new { id = activeWo.Id })" class="btn btn-success fw-bold">
+                        <i class="fa-solid fa-box-open me-1"></i> Return from Maintenance
+                    </a>
+                }
+            }
+            else
+            {
+                <a href="@Url.Action("SendToSupplier", "Maintenance", new { assetId = asset.Id })" class="btn btn-outline-warning text-dark fw-semibold">
+                    <i class="fa-solid fa-truck-ramp-box me-1"></i> Send to Vendor
+                </a>
+            }
             <button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#transferModal">
                 <i class="fa-solid fa-arrows-split-up-and-left me-1"></i> Transfer Custody
             </button>
@@ -345,7 +361,16 @@
                                         </td>
                                         <td>@m.Description</td>
                                         <td>
-                                            @if (!string.IsNullOrWhiteSpace(m.PartsReplaced))
+                                            @if (m.ParsedParts.Any())
+                                            {
+                                                @foreach (var part in m.ParsedParts)
+                                                {
+                                                    <span class="badge bg-light text-dark border me-1 mb-1">
+                                                        <i class="fa-solid fa-microchip text-primary me-1"></i> @part.PartName (x@part.Quantity)
+                                                    </span>
+                                                }
+                                            }
+                                            else if (!string.IsNullOrWhiteSpace(m.PartsReplaced))
                                             {
                                                 <code class="text-dark bg-light px-2 py-1 rounded small">@m.PartsReplaced</code>
                                             }

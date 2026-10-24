@@ -219,6 +219,10 @@
                             {
                                 <span class="badge bg-success fs-6"><i class="fa-solid fa-check me-1"></i> Closed / Resolved</span>
                             }
+                            else if (ticket.StatusId == 6 || string.Equals(ticket.Status?.Status, "maintenance", StringComparison.OrdinalIgnoreCase))
+                            {
+                                <span class="badge bg-warning text-dark fs-6 border border-warning"><i class="fa-solid fa-screwdriver-wrench me-1 text-warning"></i> Under Maintenance</span>
+                            }
                             else
                             {
                                 <span class="badge bg-info text-dark fs-6">@(ticket.Status?.Status ?? "Open")</span>
@@ -301,8 +305,30 @@
                         <span class="text-muted">Custodian:</span> <strong>@(ticket.Asset.User?.FullName ?? "Central Stock")</strong>
                     </div>
                     <div class="small">
-                        <span class="text-muted">Asset Status:</span> <span class="badge bg-light text-dark border">@ticket.Asset.Status</span>
+                        <span class="text-muted">Asset Status:</span> 
+                        @if (string.Equals(ticket.Asset.Status, "Under Maintenance", StringComparison.OrdinalIgnoreCase))
+                        {
+                            <span class="badge bg-warning text-dark border border-warning"><i class="fa-solid fa-truck-ramp-box me-1"></i> Under Maintenance</span>
+                        }
+                        else
+                        {
+                            <span class="badge bg-light text-dark border">@ticket.Asset.Status</span>
+                        }
                     </div>
+                    @if (string.Equals(ticket.Asset.Status, "Under Maintenance", StringComparison.OrdinalIgnoreCase))
+                    {
+                        <div class="alert alert-warning border border-warning p-2 mt-2 mb-0 small">
+                            <i class="fa-solid fa-truck-ramp-box me-1 text-warning"></i>
+                            <strong>At Supplier:</strong> Currently undergoing external vendor maintenance.
+                            <a href="@Url.Action("Index", "Maintenance")" class="alert-link d-block mt-1">View Work Orders &rarr;</a>
+                        </div>
+                    }
+                    else if (!isClosed && canManage)
+                    {
+                        <a href="@Url.Action("SendToSupplier", "Maintenance", new { assetId = ticket.AssetId, ticketId = ticket.Id })" class="btn btn-outline-warning text-dark btn-sm w-100 mt-2 fw-semibold">
+                            <i class="fa-solid fa-truck-ramp-box me-1"></i> Send to Vendor Maintenance
+                        </a>
+                    }
                 </div>
             </div>
         }

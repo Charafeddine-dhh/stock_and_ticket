@@ -1,0 +1,278 @@
+@model StockPortal.Models.AssetMaintenance
+@{
+    ViewData["Title"] = $"Maintenance Work Order #{Model.Id}";
+    var asset = Model.Asset;
+    var supplier = Model.Supplier;
+    var parts = Model.ParsedParts;
+    bool isUnderMaintenance = Model.IsUnderMaintenance;
+}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <div class="d-flex align-items-center gap-2">
+            <h4 class="fw-bold mb-0">Maintenance Work Order #@Model.Id</h4>
+            @if (isUnderMaintenance)
+            {
+                <span class="badge bg-warning text-dark fs-6 px-3 py-1">
+                    <i class="fa-solid fa-truck-ramp-box me-1"></i> Under Maintenance (With Supplier)
+                </span>
+            }
+            else
+            {
+                <span class="badge bg-success fs-6 px-3 py-1">
+                    <i class="fa-solid fa-check-circle me-1"></i> Completed & Returned
+                </span>
+            }
+        </div>
+        <small class="text-muted">Hardware maintenance record, supplier vendor audit, and parts replacement manifest</small>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="@Url.Action("Index")" class="btn btn-outline-secondary">
+            <i class="fa-solid fa-arrow-left me-1"></i> Back to Schedule
+        </a>
+        @if (isUnderMaintenance)
+        {
+            <a href="@Url.Action("ReturnFromSupplier", new { id = Model.Id })" class="btn btn-success fw-bold">
+                <i class="fa-solid fa-box-open me-1"></i> Receive & Complete Work Order
+            </a>
+        }
+    </div>
+</div>
+
+<div class="row g-4">
+    <!-- Left Column: Core Work Order & Hardware Details -->
+    <div class="col-lg-8">
+        <!-- Asset & Vendor Overview Card -->
+        <div class="card shadow-sm border-0 mb-4">
+            <div class="card-header bg-white py-3">
+                <h6 class="mb-0 fw-bold"><i class="fa-solid fa-server text-primary me-2"></i> Equipment & Maintenance Classification</h6>
+            </div>
+            <div class="card-body p-4">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <div class="text-muted small text-uppercase">Asset Tag / Hospital No</div>
+                        <div class="fs-5 fw-bold">
+                            @if (asset != null)
+                            {
+                                <a href="@Url.Action("Details", "Assets", new { id = asset.Id })" class="text-decoration-none">
+                                    <i class="fa-solid fa-barcode text-muted me-1"></i> @(asset.HospitalNo ?? ("#" + asset.Id))
+                                </a>
+                            }
+                            else
+                            {
+                                <span>#@Model.AssetId</span>
+                            }
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="text-muted small text-uppercase">Maintenance Team / Scope</div>
+                        <div class="fs-6 fw-bold">
+                            <span class="badge bg-primary">@(asset?.MaintenanceTeam ?? "IT")</span>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="text-muted small text-uppercase">Brand & Model</div>
+                        <div class="fw-semibold">@(asset?.Brand ?? "N/A") @(asset?.ModelNo.HasValue == true ? "Model " + asset.ModelNo : "")</div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="text-muted small text-uppercase">Serial Number</div>
+                        <div class="font-monospace fw-semibold">@(asset?.SerialNo ?? "N/A")</div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="text-muted small text-uppercase">External Supplier / Vendor</div>
+                        <div class="fw-bold text-dark fs-6">
+                            <i class="fa-solid fa-building text-secondary me-1"></i> @(supplier?.Name ?? "External Supplier")
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="text-muted small text-uppercase">Maintenance Type</div>
+                        <div class="fw-semibold">@Model.TypeName</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Issue Description & Resolution Phases -->
+        <div class="card shadow-sm border-0 mb-4">
+            <div class="card-header bg-white py-3">
+                <h6 class="mb-0 fw-bold"><i class="fa-solid fa-clipboard-list text-warning me-2"></i> Maintenance Lifecycle Details</h6>
+            </div>
+            <div class="card-body p-4">
+                <!-- Phase 1: Pre-Shipping Issue Description -->
+                <div class="mb-4">
+                    <div class="d-flex align-items-center gap-2 mb-2">
+                        <span class="badge bg-warning text-dark"><i class="fa-solid fa-paper-plane me-1"></i> Phase 1: Pre-Dispatch</span>
+                        <h6 class="mb-0 fw-bold text-dark">Issue Reported Before Sending:</h6>
+                    </div>
+                    <div class="p-3 bg-light rounded border text-dark">
+                        @(string.IsNullOrWhiteSpace(Model.Description) ? "No issue description recorded." : Model.Description)
+                    </div>
+                </div>
+
+                <!-- Phase 2: Post-Return Actions Taken -->
+                <div>
+                    <div class="d-flex align-items-center gap-2 mb-2">
+                        <span class="badge @(isUnderMaintenance ? "bg-secondary" : "bg-success")">
+                            <i class="fa-solid fa-check-double me-1"></i> Phase 2: Vendor Resolution
+                        </span>
+                        <h6 class="mb-0 fw-bold text-dark">Actions Taken & Repairs Completed:</h6>
+                    </div>
+                    @if (isUnderMaintenance)
+                    {
+                        <div class="p-3 bg-warning bg-opacity-10 rounded border border-warning text-warning-emphasis">
+                            <i class="fa-solid fa-clock me-1"></i> The asset is currently at the supplier. Actions taken will be documented when the equipment is received back.
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="p-3 bg-light rounded border text-dark">
+                            @(string.IsNullOrWhiteSpace(Model.ActionTaken) ? "No specific action notes recorded." : Model.ActionTaken)
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <!-- Replaced Parts & Components (JSON Spec) -->
+        <div class="card shadow-sm border-0 mb-4">
+            <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+                <h6 class="mb-0 fw-bold">
+                    <i class="fa-solid fa-microchip text-primary me-2"></i> Replaced Parts & Materials (JSON Specification)
+                </h6>
+                <span class="badge bg-light text-dark border">@parts.Count Component(s)</span>
+            </div>
+            <div class="card-body p-4">
+                @if (!parts.Any())
+                {
+                    <div class="text-center text-muted py-3">
+                        <i class="fa-solid fa-box-open fa-2x mb-2 text-secondary"></i>
+                        <div>@(isUnderMaintenance ? "Replaced components will be recorded when the asset is returned." : "No replacement parts were documented for this work order.")</div>
+                    </div>
+                }
+                else
+                {
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead class="table-light small text-uppercase">
+                                <tr>
+                                    <th>Part / Component Name</th>
+                                    <th>Part / Model Number</th>
+                                    <th class="text-center">Quantity</th>
+                                    <th class="text-end">Cost ($)</th>
+                                    <th class="text-center">Warranty</th>
+                                    <th>Notes / Serial</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var p in parts)
+                                {
+                                    <tr>
+                                        <td class="fw-bold text-dark">
+                                            <i class="fa-solid fa-screwdriver-wrench text-muted me-1"></i> @p.PartName
+                                        </td>
+                                        <td class="font-monospace small">@(string.IsNullOrWhiteSpace(p.PartNumber) ? "N/A" : p.PartNumber)</td>
+                                        <td class="text-center"><span class="badge bg-secondary">x@p.Quantity</span></td>
+                                        <td class="text-end fw-semibold">@(p.Cost.HasValue && p.Cost > 0 ? p.Cost.Value.ToString("C2") : "Included")</td>
+                                        <td class="text-center">
+                                            @if (p.UnderWarranty)
+                                            {
+                                                <span class="badge bg-success bg-opacity-10 text-success border border-success">
+                                                    <i class="fa-solid fa-shield-check me-1"></i> Warranty
+                                                </span>
+                                            }
+                                            else
+                                            {
+                                                <span class="text-muted small">Billable</span>
+                                            }
+                                        </td>
+                                        <td class="small text-muted">@(string.IsNullOrWhiteSpace(p.Notes) ? "-" : p.Notes)</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Column: Timeline, Custody Trail & Linked Ticket -->
+    <div class="col-lg-4">
+        <!-- Timeline & Custody Card -->
+        <div class="card shadow-sm border-0 mb-4">
+            <div class="card-header bg-white py-3">
+                <h6 class="mb-0 fw-bold"><i class="fa-solid fa-timeline text-primary me-2"></i> Timeline & Custody State</h6>
+            </div>
+            <div class="card-body p-3">
+                <ul class="list-group list-group-flush">
+                    <li class="list-group-item d-flex justify-content-between px-0">
+                        <span class="text-muted">Sent Date:</span>
+                        <span class="fw-semibold">@(Model.SentDate?.ToString("yyyy-MM-dd HH:mm") ?? Model.TimStamp?.ToString("yyyy-MM-dd HH:mm"))</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between px-0">
+                        <span class="text-muted">Return Date:</span>
+                        <span class="fw-semibold">@(Model.ReturnDate?.ToString("yyyy-MM-dd HH:mm") ?? "Pending Return")</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between px-0">
+                        <span class="text-muted">Total Time in Maint:</span>
+                        <span class="badge bg-light text-dark border">@Model.DaysInMaintenance day(s)</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between px-0">
+                        <span class="text-muted">Responsible Tech:</span>
+                        <span class="fw-semibold">@(Model.Technician?.FullName ?? "Staff Tech")</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between px-0">
+                        <span class="text-muted">Total Cost:</span>
+                        <span class="fw-bold text-success fs-6">@(Model.Cost.HasValue ? Model.Cost.Value.ToString("C2") : "$0.00")</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between px-0">
+                        <span class="text-muted">Original Custodian:</span>
+                        <span class="fw-semibold">@(Model.PreviousUser?.FullName ?? "Central Stock")</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between px-0">
+                        <span class="text-muted">Current Custody:</span>
+                        @if (isUnderMaintenance)
+                        {
+                            <span class="badge bg-warning text-dark border border-warning">With Supplier</span>
+                        }
+                        else
+                        {
+                            <span class="badge bg-success bg-opacity-10 text-success border border-success">
+                                @(asset?.User != null ? asset.User.FullName : "Central Stock")
+                            </span>
+                        }
+                    </li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- Linked Helpdesk Ticket -->
+        <div class="card shadow-sm border-0 mb-4">
+            <div class="card-header bg-white py-3">
+                <h6 class="mb-0 fw-bold"><i class="fa-solid fa-ticket text-info me-2"></i> Linked Helpdesk Ticket</h6>
+            </div>
+            <div class="card-body p-3">
+                @if (Model.Ticket != null)
+                {
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <a href="@Url.Action("Details", "Tickets", new { id = Model.Ticket.Id })" class="fw-bold fs-6 text-decoration-none">
+                            Ticket #@Model.Ticket.Id
+                        </a>
+                        <span class="badge bg-warning text-dark border">@(Model.Ticket.Status?.Status ?? "Maintenance")</span>
+                    </div>
+                    <div class="text-muted small mb-1"><strong>Issue Category:</strong> @Model.Ticket.Type</div>
+                    <div class="text-muted small mb-3"><strong>Date Opened:</strong> @Model.Ticket.OpenedDT?.ToString("yyyy-MM-dd HH:mm")</div>
+                    <a href="@Url.Action("Details", "Tickets", new { id = Model.Ticket.Id })" class="btn btn-outline-primary btn-sm w-100">
+                        <i class="fa-solid fa-arrow-up-right-from-square me-1"></i> Open Ticket Thread
+                    </a>
+                }
+                else
+                {
+                    <div class="text-muted small text-center py-2">
+                        No helpdesk ticket linked to this work order.
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+</div>

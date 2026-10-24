@@ -63,6 +63,7 @@ namespace StockPortal.ViewModels
         public List<Asset> DueWithin30DaysAssets { get; set; } = new();
         public List<Asset> UpToDateAssets { get; set; } = new();
         public List<AssetMaintenance> RecentLogs { get; set; } = new();
+        public List<AssetMaintenance> ActiveWorkOrders { get; set; } = new();
     }
 
     public class AutoTicketViewModel

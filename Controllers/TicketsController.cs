@@ -91,6 +91,10 @@ namespace StockPortal.Controllers
                 {
                     query = query.Where(t => t.Handler == null || t.Handler.TechUserId == null);
                 }
+                else if (filter == "maintenance" || filter == "in_maintenance")
+                {
+                    query = query.Where(t => t.StatusId == 6 || (t.Status != null && t.Status.Status != null && t.Status.Status.ToLower() == "maintenance"));
+                }
             }
 
             if (!string.IsNullOrWhiteSpace(search))
@@ -116,6 +120,14 @@ namespace StockPortal.Controllers
                 .Where(u => u.IsActive == true && (u.Role == SystemRoles.Maintenance || u.Role == SystemRoles.Admin))
                 .OrderBy(u => u.FullName)
                 .ToListAsync();
+
+            var maintCountQuery = _context.Tickets.Where(t => t.StatusId == 6 || (t.Status != null && t.Status.Status != null && t.Status.Status.ToLower() == "maintenance"));
+            if (_currentUserService.IsMaintenance())
+            {
+                var myTeam = _currentUserService.GetMaintenanceTeam();
+                maintCountQuery = maintCountQuery.Where(t => t.TargetTeam == myTeam);
+            }
+            ViewBag.MaintenanceCount = await maintCountQuery.CountAsync();
 
             var tickets = await query.OrderByDescending(t => t.OpenedDT).ToListAsync();
             return View(tickets);
@@ -895,6 +907,7 @@ namespace StockPortal.Controllers
                 if (filter == "my_assigned") query = query.Where(t => t.Handler != null && t.Handler.TechUserId == currentUserId);
                 else if (filter == "my_opened") query = query.Where(t => t.OpenedBy == currentUserId || t.OnBehalfOf == currentUserId);
                 else if (filter == "unassigned") query = query.Where(t => t.Handler == null || t.Handler.TechUserId == null);
+                else if (filter == "maintenance" || filter == "in_maintenance") query = query.Where(t => t.StatusId == 6 || (t.Status != null && t.Status.Status != null && t.Status.Status.ToLower() == "maintenance"));
             }
 
             if (!string.IsNullOrWhiteSpace(search))

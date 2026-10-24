@@ -55,6 +55,9 @@
             <a href="@Url.Action("Index", new { filter = "unassigned" })" class="btn btn-sm @(currentFilter == "unassigned" ? "btn-warning text-dark fw-bold" : "btn-light border text-warning-emphasis")">
                 <i class="fa-solid fa-triangle-exclamation me-1"></i> Unassigned
             </a>
+            <a href="@Url.Action("Index", new { filter = "maintenance" })" class="btn btn-sm @(currentFilter == "maintenance" || ViewBag.SelectedStatusId == 6 ? "btn-warning text-dark fw-bold shadow-sm" : "btn-light border text-warning-emphasis")">
+                <i class="fa-solid fa-screwdriver-wrench me-1 text-warning"></i> In Maintenance (@(ViewBag.MaintenanceCount ?? 0))
+            </a>
         </div>
 
         <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
@@ -200,8 +203,22 @@
                                             <i class="fa-solid fa-check me-1"></i> Closed
                                         </span>
                                         break;
+                                    case 6:
+                                        <span class="badge bg-warning bg-opacity-25 text-dark border border-warning">
+                                            <i class="fa-solid fa-screwdriver-wrench me-1 text-warning"></i> Maintenance
+                                        </span>
+                                        break;
                                     default:
-                                        <span class="badge bg-light text-dark">@(ticket.Status?.Status ?? "Status")</span>
+                                        @if (string.Equals(ticket.Status?.Status, "maintenance", StringComparison.OrdinalIgnoreCase))
+                                        {
+                                            <span class="badge bg-warning bg-opacity-25 text-dark border border-warning">
+                                                <i class="fa-solid fa-screwdriver-wrench me-1 text-warning"></i> Maintenance
+                                            </span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-light text-dark">@(ticket.Status?.Status ?? "Status")</span>
+                                        }
                                         break;
                                 }
                             </td>

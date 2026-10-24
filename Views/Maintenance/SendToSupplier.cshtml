@@ -1,0 +1,119 @@
+@model StockPortal.Models.AssetMaintenance
+@{
+    ViewData["Title"] = "Send Asset to Maintenance";
+}
+
+<div class="row justify-content-center">
+    <div class="col-lg-9">
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-warning bg-opacity-10 py-3 border-bottom border-warning">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div>
+                        <h5 class="mb-0 fw-bold text-dark">
+                            <i class="fa-solid fa-truck-ramp-box text-warning me-2"></i> Send Asset to Maintenance (Work Order)
+                        </h5>
+                        <small class="text-muted">Dispatch hardware to an external vendor / contractor and transfer custody to the supplier</small>
+                    </div>
+                    <span class="badge bg-warning text-dark px-3 py-2">
+                        <i class="fa-solid fa-shield-halved me-1"></i> Phase 1: Dispatch
+                    </span>
+                </div>
+            </div>
+
+            <div class="card-body p-4">
+                <div class="alert alert-info border-0 shadow-sm d-flex gap-2 align-items-center mb-4">
+                    <i class="fa-solid fa-circle-info fs-4 text-info"></i>
+                    <div>
+                        <strong>Maintenance Custody Lifecycle:</strong>
+                        Sending an asset to a supplier changes its operational status to <strong>Under Maintenance</strong> and transfers custody to the supplier.
+                        You will describe the issue now; after the asset returns from the supplier, you will record replaced parts in dynamic JSON format and reassign custody back to Central Stock or directly to a user.
+                    </div>
+                </div>
+
+                <form asp-action="SendToSupplier" method="post">
+                    @Html.AntiForgeryToken()
+                    <div asp-validation-summary="ModelOnly" class="text-danger mb-3"></div>
+
+                    <div class="row g-3">
+                        <!-- 1. Equipment Selection -->
+                        <div class="col-md-12">
+                            <label class="form-label fw-bold">Target Equipment / Asset <span class="text-danger">*</span></label>
+                            <select name="assetId" id="assetSelect" class="form-select form-select-lg" asp-items="ViewBag.Assets" required>
+                                <option value="">-- Select Asset to Send to Maintenance --</option>
+                            </select>
+                            <div class="form-text small">Only equipment in your authorized maintenance department is listed.</div>
+                        </div>
+
+                        <!-- 2. Supplier & Maintenance Type -->
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold">External Supplier / Maintenance Vendor <span class="text-danger">*</span></label>
+                            <select name="supplierId" class="form-select" asp-items="ViewBag.Suppliers" required>
+                                <option value="">-- Select Maintenance Contractor / Vendor --</option>
+                            </select>
+                            <div class="form-text small">Asset custody will be officially transferred to this supplier.</div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold">Maintenance Classification</label>
+                            <select name="maintenanceType" class="form-select">
+                                <option value="1" selected>Breakdown / Corrective Repair</option>
+                                <option value="3">Supplier Warranty Service</option>
+                                <option value="2">Scheduled Periodic Overhaul / Calibration</option>
+                                <option value="4">External Certification & Safety Check</option>
+                            </select>
+                        </div>
+
+                        <!-- 3. Sent Date & Responsible Technician -->
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold">Dispatch / Sent Date <span class="text-danger">*</span></label>
+                            <input type="datetime-local" name="sentDate" class="form-control" value="@DateTime.Now.ToString("yyyy-MM-ddTHH:mm")" required />
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold">Responsible Hospital Technician</label>
+                            <select name="technicianId" class="form-select" asp-items="ViewBag.Technicians">
+                            </select>
+                        </div>
+
+                        <!-- 4. Linked Helpdesk Ticket -->
+                        <div class="col-md-12">
+                            <label class="form-label fw-bold">Link to Helpdesk Ticket (Optional)</label>
+                            <select name="ticketId" class="form-select" asp-items="ViewBag.Tickets">
+                                <option value="">-- No Linked Ticket (Standalone Maintenance) --</option>
+                            </select>
+                            <div class="form-text small">
+                                <i class="fa-solid fa-link text-primary me-1"></i> Linking a ticket will automatically update its status to <strong>Under Maintenance</strong> and log a telemetry event in the ticket thread.
+                            </div>
+                        </div>
+
+                        <!-- 5. Issue Description -->
+                        <div class="col-md-12">
+                            <label class="form-label fw-bold">Issue Description & Failure Diagnostics (Before Sending) <span class="text-danger">*</span></label>
+                            <textarea name="description" class="form-control" rows="4" placeholder="Detail hardware fault symptoms, error codes, failed diagnostic tests, or vendor scope of work required..." required></textarea>
+                            <div class="form-text small">
+                                State clearly why the item is being sent out. Replaced parts and work resolutions will be documented upon return.
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card bg-light border p-3 mt-4">
+                        <div class="d-flex align-items-center gap-2 text-warning-emphasis fw-semibold">
+                            <i class="fa-solid fa-arrow-right-arrow-left"></i>
+                            <span>Custody Impact:</span>
+                        </div>
+                        <div class="small text-muted mt-1">
+                            Current user/stock custody will be marked as returned, and an active custody record will be opened for the chosen Supplier.
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-end gap-2 border-top pt-4 mt-4">
+                        <a href="@Url.Action("Index")" class="btn btn-outline-secondary px-4">Cancel</a>
+                        <button type="submit" class="btn btn-warning text-dark fw-bold px-4">
+                            <i class="fa-solid fa-paper-plane me-1"></i> Dispatch & Transfer Custody to Supplier
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>

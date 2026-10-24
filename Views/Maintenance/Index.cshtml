@@ -1,26 +1,37 @@
 @model StockPortal.ViewModels.MaintenanceScheduleViewModel
 @{
-    ViewData["Title"] = "Preventive Maintenance & Inspection Schedule";
+    ViewData["Title"] = "Maintenance Schedule & Vendor Work Orders";
 }
 
 <div class="d-flex justify-content-between align-items-center mb-4">
     <div>
-        <h4 class="fw-bold mb-0">Preventive Maintenance & Inspection Schedule</h4>
-        <small class="text-muted">Track recurring hardware servicing, calibration cycles, and maintenance work logs</small>
+        <h4 class="fw-bold mb-0">Maintenance Schedule & Vendor Work Orders</h4>
+        <small class="text-muted">Monitor equipment sent to suppliers, track custody transfers, and record recurring preventive inspections</small>
     </div>
     <div class="d-flex gap-2">
         <a href="@Url.Action("ExportCsv")" class="btn btn-outline-success">
             <i class="fa-solid fa-file-csv me-1"></i> Export CSV
         </a>
-        <a href="@Url.Action("Log")" class="btn btn-warning text-dark fw-semibold">
-            <i class="fa-solid fa-wrench me-1"></i> Log Maintenance Work
+        <a href="@Url.Action("SendToSupplier")" class="btn btn-warning text-dark fw-bold">
+            <i class="fa-solid fa-truck-ramp-box me-1"></i> Send Asset to Maintenance
         </a>
     </div>
 </div>
 
 <!-- Maintenance Overview Cards -->
 <div class="row g-3 mb-4">
-    <div class="col-md-4">
+    <div class="col-md-3">
+        <div class="card border-0 shadow-sm p-3" style="background: linear-gradient(135deg, #fffbeb 0%, #ffffff 100%);">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <div class="text-muted small text-uppercase fw-bold">At Supplier (Maint.)</div>
+                    <div class="h3 fw-bold text-warning mb-0">@Model.ActiveWorkOrders.Count</div>
+                </div>
+                <div class="stat-icon bg-warning bg-opacity-10 text-warning"><i class="fa-solid fa-truck-ramp-box"></i></div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
         <div class="card border-0 shadow-sm p-3" style="background: linear-gradient(135deg, #fef2f2 0%, #ffffff 100%);">
             <div class="d-flex justify-content-between align-items-center">
                 <div>
@@ -31,18 +42,18 @@
             </div>
         </div>
     </div>
-    <div class="col-md-4">
+    <div class="col-md-3">
         <div class="card border-0 shadow-sm p-3" style="background: linear-gradient(135deg, #fff7ed 0%, #ffffff 100%);">
             <div class="d-flex justify-content-between align-items-center">
                 <div>
                     <div class="text-muted small text-uppercase fw-bold">Due within 30 Days</div>
-                    <div class="h3 fw-bold text-warning mb-0">@Model.DueWithin30DaysAssets.Count</div>
+                    <div class="h3 fw-bold text-warning-emphasis mb-0">@Model.DueWithin30DaysAssets.Count</div>
                 </div>
                 <div class="stat-icon bg-warning bg-opacity-10 text-warning"><i class="fa-solid fa-clock"></i></div>
             </div>
         </div>
     </div>
-    <div class="col-md-4">
+    <div class="col-md-3">
         <div class="card border-0 shadow-sm p-3" style="background: linear-gradient(135deg, #f0fdf4 0%, #ffffff 100%);">
             <div class="d-flex justify-content-between align-items-center">
                 <div>
@@ -55,12 +66,17 @@
     </div>
 </div>
 
-<!-- Tabs for Schedules & Historical Work Orders -->
+<!-- Tabs for Schedules & Work Orders -->
 <div class="card shadow-sm border-0">
     <div class="card-header bg-white p-0">
         <ul class="nav nav-tabs card-header-tabs m-0 px-3 pt-2" id="maintTabs" role="tablist">
             <li class="nav-item">
-                <button class="nav-link active fw-semibold text-danger" id="overdue-tab" data-bs-toggle="tab" data-bs-target="#overdue" type="button" role="tab">
+                <button class="nav-link active fw-bold text-warning-emphasis" id="active-wo-tab" data-bs-toggle="tab" data-bs-target="#active-wo" type="button" role="tab">
+                    <i class="fa-solid fa-truck-ramp-box me-1 text-warning"></i> Active Work Orders / At Supplier (@Model.ActiveWorkOrders.Count)
+                </button>
+            </li>
+            <li class="nav-item">
+                <button class="nav-link fw-semibold text-danger" id="overdue-tab" data-bs-toggle="tab" data-bs-target="#overdue" type="button" role="tab">
                     <i class="fa-solid fa-triangle-exclamation me-1"></i> Overdue Inspections (@Model.OverdueAssets.Count)
                 </button>
             </li>
@@ -83,8 +99,109 @@
     </div>
     <div class="card-body p-4">
         <div class="tab-content" id="maintTabsContent">
-            <!-- 1. Overdue Tab -->
-            <div class="tab-pane fade show active" id="overdue" role="tabpanel">
+            <!-- 1. Active Supplier Work Orders Tab -->
+            <div class="tab-pane fade show active" id="active-wo" role="tabpanel">
+                @if (!Model.ActiveWorkOrders.Any())
+                {
+                    <div class="text-center text-muted py-5">
+                        <i class="fa-solid fa-circle-check fa-3x mb-3 text-success"></i>
+                        <h5>No Assets Currently at External Maintenance</h5>
+                        <p class="text-muted mb-3">All equipment is currently on-site in hospital custody.</p>
+                        <a href="@Url.Action("SendToSupplier")" class="btn btn-warning text-dark fw-semibold">
+                            <i class="fa-solid fa-truck-ramp-box me-1"></i> Dispatch Asset to Maintenance
+                        </a>
+                    </div>
+                }
+                else
+                {
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Order #</th>
+                                    <th>Asset Tag & Equipment</th>
+                                    <th>External Supplier / Vendor</th>
+                                    <th>Sent Date & Duration</th>
+                                    <th>Reported Issue (Pre-Dispatch)</th>
+                                    <th>Linked Ticket</th>
+                                    <th class="text-end">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var wo in Model.ActiveWorkOrders)
+                                {
+                                    <tr>
+                                        <td>
+                                            <a href="@Url.Action("WorkOrderDetails", new { id = wo.Id })" class="fw-bold font-monospace text-decoration-none">
+                                                #WO-@wo.Id
+                                            </a>
+                                        </td>
+                                        <td>
+                                            @if (wo.Asset != null)
+                                            {
+                                                <a href="@Url.Action("Details", "Assets", new { id = wo.Asset.Id })" class="fw-bold text-decoration-none">
+                                                    @wo.Asset.HospitalNo
+                                                </a>
+                                                <div class="small text-muted">@wo.Asset.Brand @wo.Asset.Type</div>
+                                                <span class="badge bg-primary" style="font-size: 0.68rem;">@wo.Asset.MaintenanceTeam</span>
+                                            }
+                                            else
+                                            {
+                                                <span>#@wo.AssetId</span>
+                                            }
+                                        </td>
+                                        <td>
+                                            <div class="fw-semibold text-dark">
+                                                <i class="fa-solid fa-building text-secondary me-1"></i> @(wo.Supplier?.Name ?? "Supplier")
+                                            </div>
+                                            <span class="badge bg-warning text-dark border border-warning" style="font-size: 0.68rem;">
+                                                Custody: Supplier
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <div>@(wo.SentDate?.ToString("MMM dd, yyyy") ?? wo.TimStamp?.ToString("MMM dd, yyyy"))</div>
+                                            <span class="badge bg-light text-dark border" style="font-size: 0.72rem;">
+                                                <i class="fa-solid fa-clock me-1 text-warning"></i> @wo.DaysInMaintenance day(s) away
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <div class="text-truncate" style="max-width: 250px;" title="@wo.Description">
+                                                @(string.IsNullOrWhiteSpace(wo.Description) ? "No description recorded" : wo.Description)
+                                            </div>
+                                        </td>
+                                        <td>
+                                            @if (wo.TicketId.HasValue)
+                                            {
+                                                <a href="@Url.Action("Details", "Tickets", new { id = wo.TicketId.Value })" class="fw-bold text-decoration-none">
+                                                    Ticket #@wo.TicketId.Value
+                                                </a>
+                                                <div><span class="badge bg-warning text-dark" style="font-size: 0.68rem;">Under Maintenance</span></div>
+                                            }
+                                            else
+                                            {
+                                                <span class="text-muted small">Direct</span>
+                                            }
+                                        </td>
+                                        <td class="text-end">
+                                            <div class="btn-group">
+                                                <a href="@Url.Action("ReturnFromSupplier", new { id = wo.Id })" class="btn btn-sm btn-success fw-bold" title="Receive asset and complete order">
+                                                    <i class="fa-solid fa-box-open me-1"></i> Return & Complete
+                                                </a>
+                                                <a href="@Url.Action("WorkOrderDetails", new { id = wo.Id })" class="btn btn-sm btn-outline-secondary" title="View Work Order details">
+                                                    <i class="fa-solid fa-eye"></i>
+                                                </a>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </div>
+
+            <!-- 2. Overdue Tab -->
+            <div class="tab-pane fade" id="overdue" role="tabpanel">
                 @if (!Model.OverdueAssets.Any())
                 {
                     <div class="text-center text-success py-4">
@@ -113,10 +230,9 @@
                                 {
                                     <tr>
                                         <td>
-                                            <a href="@Url.Action("Details", "Assets", new { id = a.Id })" class="fw-bold text-decoration-none">
+                                            <a href="@Url.Action("Details", "Assets", new { id = a.Id })" class="fw-bold text-decoration-none text-danger">
                                                 @a.HospitalNo &bull; @a.Brand (@a.Type)
                                             </a>
-                                            <div class="small text-muted font-monospace">SN: @(a.SerialNo ?? "N/A")</div>
                                         </td>
                                         <td>@(a.Room?.DisplayName ?? "Unassigned")</td>
                                         <td>@(a.User?.FullName ?? "Central Stock")</td>
@@ -124,13 +240,23 @@
                                         <td>@(a.LastPeriodic?.ToString("MMM dd, yyyy") ?? "Never")</td>
                                         <td>
                                             <span class="badge bg-danger">
-                                                Overdue (@a.NextPeriodic?.ToString("MMM dd, yyyy"))
+                                                Overdue: @a.NextPeriodic?.ToString("MMM dd, yyyy")
                                             </span>
                                         </td>
                                         <td class="text-end">
-                                            <a href="@Url.Action("Log", new { assetId = a.Id })" class="btn btn-sm btn-outline-danger">
-                                                Log Inspection
-                                            </a>
+                                            <div class="btn-group">
+                                                <a href="@Url.Action("SendToSupplier", new { assetId = a.Id })" class="btn btn-sm btn-warning text-dark fw-semibold">
+                                                    <i class="fa-solid fa-truck-ramp-box me-1"></i> Send to Vendor
+                                                </a>
+                                                <form asp-action="QuickCompleteCheckup" method="post" class="d-inline ms-1">
+                                                    @Html.AntiForgeryToken()
+                                                    <input type="hidden" name="assetId" value="@a.Id" />
+                                                    <input type="hidden" name="technicianId" value="@(a.UserId ?? 1)" />
+                                                    <button type="submit" class="btn btn-sm btn-outline-success">
+                                                        <i class="fa-solid fa-check me-1"></i> Internal Check
+                                                    </button>
+                                                </form>
+                                            </div>
                                         </td>
                                     </tr>
                                 }
@@ -140,11 +266,15 @@
                 }
             </div>
 
-            <!-- 2. Due Within 30 Days Tab -->
+            <!-- 3. Due Within 30 Days Tab -->
             <div class="tab-pane fade" id="upcoming" role="tabpanel">
                 @if (!Model.DueWithin30DaysAssets.Any())
                 {
-                    <div class="text-center text-muted py-4">No assets due for inspection in the next 30 days.</div>
+                    <div class="text-center text-muted py-4">
+                        <i class="fa-solid fa-clock-check fa-3x mb-2 text-secondary"></i>
+                        <h5>No Immediate PM Due</h5>
+                        <p class="text-muted">No equipment due for inspection within the next 30 days.</p>
+                    </div>
                 }
                 else
                 {
@@ -180,8 +310,8 @@
                                             </span>
                                         </td>
                                         <td class="text-end">
-                                            <a href="@Url.Action("Log", new { assetId = a.Id })" class="btn btn-sm btn-outline-warning text-dark">
-                                                Perform Checkup
+                                            <a href="@Url.Action("SendToSupplier", new { assetId = a.Id })" class="btn btn-sm btn-outline-warning text-dark">
+                                                Schedule Maint.
                                             </a>
                                         </td>
                                     </tr>
@@ -192,7 +322,7 @@
                 }
             </div>
 
-            <!-- 3. Up to Date Tab -->
+            <!-- 4. Up to Date Tab -->
             <div class="tab-pane fade" id="uptodate" role="tabpanel">
                 <div class="table-responsive">
                     <table class="table table-hover align-middle mb-0">
@@ -231,51 +361,66 @@
                 </div>
             </div>
 
-            <!-- 4. Historical Work Orders Tab -->
+            <!-- 5. Completed Work Logs Tab -->
             <div class="tab-pane fade" id="logs" role="tabpanel">
                 <div class="table-responsive">
                     <table class="table table-hover align-middle mb-0">
                         <thead class="table-light">
                             <tr>
-                                <th>Date</th>
+                                <th>Order #</th>
+                                <th>Date Completed</th>
                                 <th>Equipment</th>
-                                <th>Type</th>
-                                <th>Description</th>
-                                <th>Parts Replaced</th>
-                                <th>Technician / Contractor</th>
-                                <th>Ticket</th>
+                                <th>Supplier / Vendor</th>
+                                <th>Description / Actions</th>
+                                <th>Replaced Parts (JSON)</th>
+                                <th>Cost</th>
+                                <th class="text-end">Action</th>
                             </tr>
                         </thead>
                         <tbody>
                             @foreach (var m in Model.RecentLogs)
                             {
                                 <tr>
-                                    <td>@m.TimStamp?.ToString("MMM dd, yyyy")</td>
                                     <td>
-                                        <a href="@Url.Action("Details", "Assets", new { id = m.AssetId })" class="fw-semibold text-decoration-none">
-                                            @(m.Asset?.HospitalNo ?? "Asset #" + m.AssetId)
+                                        <a href="@Url.Action("WorkOrderDetails", new { id = m.Id })" class="fw-bold font-monospace text-decoration-none">
+                                            #WO-@m.Id
                                         </a>
-                                        <div class="small text-muted">@m.Asset?.Brand</div>
+                                    </td>
+                                    <td>@(m.ReturnDate?.ToString("MMM dd, yyyy") ?? m.TimStamp?.ToString("MMM dd, yyyy"))</td>
+                                    <td>
+                                        <a href="@Url.Action("Details", "Assets", new { id = m.AssetId })" class="fw-bold text-decoration-none">
+                                            @(m.Asset?.HospitalNo ?? ("#" + m.AssetId))
+                                        </a>
+                                        <div class="small text-muted">@m.Asset?.Brand @m.Asset?.Type</div>
                                     </td>
                                     <td>
-                                        <span class="badge @(m.MaintenanceType == 2 ? "bg-info text-dark" : "bg-danger")">
-                                            @m.TypeName
-                                        </span>
+                                        <i class="fa-solid fa-building text-secondary me-1"></i> @(m.Supplier?.Name ?? "Internal Staff")
                                     </td>
-                                    <td>@m.Description</td>
-                                    <td><code class="text-dark bg-light px-2 py-1 rounded small">@(m.PartsReplaced ?? "None")</code></td>
-                                    <td>@(m.Technician?.FullName ?? m.Supplier?.Name ?? "In-House")</td>
                                     <td>
-                                        @if (m.TicketId.HasValue)
+                                        <div class="small fw-semibold text-dark">@(string.IsNullOrWhiteSpace(m.ActionTaken) ? m.Description : m.ActionTaken)</div>
+                                    </td>
+                                    <td>
+                                        @if (m.ParsedParts.Any())
                                         {
-                                            <a href="@Url.Action("Details", "Tickets", new { id = m.TicketId.Value })" class="btn btn-sm btn-light border py-0">
-                                                #@m.TicketId
-                                            </a>
+                                            @foreach (var part in m.ParsedParts)
+                                            {
+                                                <span class="badge bg-light text-dark border me-1 mb-1" title="Model: @part.PartNumber | Qty: @part.Quantity">
+                                                    <i class="fa-solid fa-microchip text-primary me-1"></i> @part.PartName (@part.Quantity)
+                                                </span>
+                                            }
                                         }
                                         else
                                         {
                                             <span class="text-muted small">-</span>
                                         }
+                                    </td>
+                                    <td>
+                                        @(m.Cost.HasValue && m.Cost > 0 ? m.Cost.Value.ToString("C2") : "-")
+                                    </td>
+                                    <td class="text-end">
+                                        <a href="@Url.Action("WorkOrderDetails", new { id = m.Id })" class="btn btn-sm btn-outline-secondary">
+                                            <i class="fa-solid fa-eye me-1"></i> Details
+                                        </a>
                                     </td>
                                 </tr>
                             }
